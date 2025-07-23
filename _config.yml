@@ -3,3 +3,7 @@ description: DOTIFY website (WIP)
 url: "https://dot-ify.com"
 baseurl: ""
 theme: minima
+# Build settings
+markdown: kramdown
+plugins:
+  - jekyll-feed

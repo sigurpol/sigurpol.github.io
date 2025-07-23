@@ -1,0 +1,10 @@
+title: Dotify
+description: Dotify website
+url: "https://dot-ify.com"
+baseurl: ""
+theme: minima
+logo: /assets/images/cat_manga_dotify.png
+# Build settings
+markdown: kramdown
+plugins:
+  - jekyll-feed

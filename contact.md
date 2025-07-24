@@ -4,6 +4,10 @@ title: Contact
 permalink: /contact/
 ---
 
+**Company name:** DOTIFY BV
+
+**VAT:** BE1019904322
+
 📪 [e-mail](paolo@dot-ify.com)
 
 👔 [LinkedIn](

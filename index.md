@@ -5,4 +5,4 @@ title: Home
 
 # Welcome to Dotify
 
-WIP
+The site is still 🚧. Plese bear with us

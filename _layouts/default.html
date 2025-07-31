@@ -6,13 +6,16 @@
   <body>
 
     <header class="site-header" role="banner">
-      <!-- Full width logo -->
-      <div class="full-width-logo">
-        <img src="{{ "/assets/images/cat_manga_dotify.png" | relative_url }}" alt="{{ site.title | escape }}" class="site-logo">
-      </div>
-      
-      <!-- Navigation and title wrapper -->
       <div class="wrapper">
+        <!-- Logo section with cat and C64 style text -->
+        <div class="logo-section">
+          <img src="{{ "/assets/images/cat_manga_dotify.png" | relative_url }}" alt="{{ site.title | escape }}" class="cat-logo">
+          <div class="c64-title">
+            <span class="c64-text">DOTIFY</span>
+          </div>
+        </div>
+        
+        <!-- Navigation -->
         <div class="header-nav">
           <a class="site-title" rel="author" href="{{ "/" | relative_url }}">{{ site.title | escape }}</a>
 
@@ -48,8 +51,6 @@
         {{ content }}
       </div>
     </main>
-
-    {%- include footer.html -%}
 
   </body>
 

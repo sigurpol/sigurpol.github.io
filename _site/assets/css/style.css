@@ -195,15 +195,19 @@ table td { border: 1px solid #e8e8e8; }
 .highlight .vi { color: #008080; }
 .highlight .il { color: #099; }
 
-.site-header-content { display: flex; align-items: center; gap: 15px; }
+.site-header { border-top: 5px solid #424242; border-bottom: 1px solid #e8e8e8; min-height: auto; position: relative; margin: 0; padding: 0; }
 
-.site-logo { max-height: 40px; width: auto; border-radius: 8px; }
+.full-width-logo { width: 100vw !important; position: relative !important; left: 50% !important; right: 50% !important; margin-left: -50vw !important; margin-right: -50vw !important; padding: 0 !important; margin-top: 0 !important; margin-bottom: 0 !important; height: auto; overflow: visible; }
+
+.site-logo { width: 100% !important; height: auto !important; max-height: 300px !important; object-fit: contain !important; display: block !important; border-radius: 0 !important; margin: 0 !important; }
+
+.header-nav { display: flex; justify-content: space-between; align-items: center; padding: 1rem 0; }
 
 .site-title { font-size: 26px; font-weight: 300; line-height: 54px; letter-spacing: -1px; margin-bottom: 0; float: none; }
 
-@media screen and (max-width: 600px) { .site-logo { max-height: 30px; }
-  .site-title { font-size: 20px; line-height: 40px; }
-  .site-header-content { gap: 10px; } }
+@media screen and (max-width: 600px) { .site-logo { width: 100% !important; max-height: 120px !important; }
+  .site-title { font-size: 20px !important; line-height: 40px !important; }
+  .site-header-content { gap: 10px !important; padding: 0.5rem 0 !important; } }
 .contact-page { max-width: 800px; margin: 0 auto; }
 
 .company-info { background: #f8f9fa; padding: 2rem; border-radius: 12px; margin-bottom: 3rem; border-left: 4px solid #007acc; }

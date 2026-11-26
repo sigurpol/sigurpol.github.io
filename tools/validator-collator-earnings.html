@@ -521,7 +521,6 @@ function render() {
     }).join("");
   const hint = drawHint(out);
   document.getElementById("opt-notes").innerHTML =
-    "<p>A validator that only validates earns less, because the collation points of the others dilute the fixed payout.</p>" +
     breakevenLines(out).map((l) => `<p class="be-line">${l}</p>`).join("") +
     (hint ? `<p>${hint}</p>` : "");
 

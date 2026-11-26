@@ -430,7 +430,7 @@ function buildInputs() {
       document.getElementById(`k-${name}-r`).max = inp.validators;
       document.getElementById(`k-${name}`).max = inp.validators;
     });
-    field(p, `o-${name}`, "Invulnerables and candidates", "Collators chosen by the chain itself. They share the blocks and earn no points.", 0, 50, 1, () => c().others, (v) => c().others = Math.round(v));
+    field(p, `o-${name}`, "Invulnerables and candidates", "", 0, 50, 1, () => c().others, (v) => c().others = Math.round(v));
     field(p, `bt-${name}`, "Block time, ms", "Average time between blocks on this chain, measured.", 500, 12000, 1, () => c().block_ms, (v) => c().block_ms = v);
   }
   const resetButton = (parent, label, reset) => {

@@ -231,7 +231,7 @@ function world(inp, collate) {
     const mine = collate[name];
     if (!c.enabled || (c.cap !== "all" && c.cap <= 0)) continue;
     // K: metanodes collating here. It counts the validator only when it collates on this chain.
-    const K = Math.max(Math.min(c.collators || N, N) - (mine ? 0 : 1), 0);
+    const K = Math.max(Math.min(c.collators ?? N, N) - (mine ? 0 : 1), 0);
     const n = c.cap === "all" ? K : Math.min(c.cap, K);
     const blocks = inp.era_hours * 3600000 / c.block_ms;
     const b = n + c.others > 0 ? blocks / (n + c.others) : 0.0;
@@ -424,7 +424,7 @@ function buildInputs() {
     cb.addEventListener("change", () => { c().enabled = cb.checked; render(); });
     syncers.push(() => { cb.checked = c().enabled; p.classList.toggle("off", !c().enabled); });
     field(p, `k-${name}`, "Metanodes collating on this chain", "", 0, BAKED.validators, 1,
-      () => Math.min(c().collators || inp.validators, inp.validators), (v) => c().collators = Math.round(v) >= inp.validators ? null : Math.round(v));
+      () => Math.min(c().collators ?? inp.validators, inp.validators), (v) => c().collators = Math.round(v) >= inp.validators ? null : Math.round(v));
     // The slider spans 0 to the number of active validators, which can change.
     syncers.unshift(() => {
       document.getElementById(`k-${name}-r`).max = inp.validators;
@@ -470,7 +470,7 @@ function drawHint(out) {
 function everyoneInDraw(out) {
   return Object.keys(out.chains).every((n) => {
     const c = inp.chains[n];
-    return (c.collators || inp.validators) >= inp.validators;
+    return (c.collators ?? inp.validators) >= inp.validators;
   });
 }
 

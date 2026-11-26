@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Validator Collators Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@500;600&display=swap">
+<script type="importmap">
+{
+  "imports": {
+    "polkadot-api": "https://esm.sh/polkadot-api@3.3.0?bundle&deps=rxjs@7.8.2,@noble/hashes@2.4.0,@scure/base@2.4.0,scale-ts@1.6.1,@rx-state/core@0.1.4",
+    "polkadot-api/ws": "https://esm.sh/polkadot-api@3.3.0/ws?bundle&deps=rxjs@7.8.2,@noble/hashes@2.4.0,@scure/base@2.4.0,scale-ts@1.6.1,@rx-state/core@0.1.4",
+    "@polkadot-api/substrate-bindings": "https://esm.sh/@polkadot-api/substrate-bindings@0.21.2?bundle&deps=rxjs@7.8.2,@noble/hashes@2.4.0,@scure/base@2.4.0,scale-ts@1.6.1,@rx-state/core@0.1.4"
+  }
+}
+</script>
+<style>
+:root {
+  --bg: #f7f6f8; --surface: #ffffff; --fg: #1c1a22; --muted: #6a6574; --line: #e3e0e8;
+  --accent: #d6006f; --accent-soft: #fbe3ef;
+  --good: #1f7a4d; --warn: #b7791f; --bad: #b3261e; --na: #9a94a3;
+  --font-display: "Unbounded", "IBM Plex Sans", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141218; --surface: #1d1a22; --fg: #ece9f1; --muted: #a29bad; --line: #322e3a;
+    --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --warn: #e3b04b; --bad: #ff8a80; --na: #6f6878;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141218; --surface: #1d1a22; --fg: #ece9f1; --muted: #a29bad; --line: #322e3a;
+  --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --warn: #e3b04b; --bad: #ff8a80; --na: #6f6878;
+  color-scheme: dark;
+}
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 500; font-size: 0.95rem; margin: 0; letter-spacing: 0.01em; }
+h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 500; margin: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; align-content: start; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12.5px; padding: 5px 12px; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--surface); }
+.btn { font: inherit; font-size: 12.5px; font-weight: 500; padding: 5px 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--accent); color: var(--surface); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.controls label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.controls input { accent-color: var(--accent); margin: 0; }
+select { font-family: var(--font-data); font-size: 12.5px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.status { font-size: 12.5px; color: var(--muted); }
+.status.err { color: var(--bad); }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+@media (max-width: 1080px) { .cols { grid-template-columns: minmax(0, 1fr); } }
+.card { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; border-left: 4px solid var(--st); }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
+.pill { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--surface); background: var(--st); }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; font-size: 12.5px; }
+.checks li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st); display: inline-block; }
+.checks .detail { color: var(--muted); font-family: var(--font-data); font-size: 11.5px; }
+.ok { --st: var(--good); } .warn { --st: var(--warn); } .bad { --st: var(--bad); } .na { --st: var(--na); }
+.checks .val { font-family: var(--font-data); font-size: 12px; font-weight: 500; }
+dl { display: grid; grid-template-columns: fit-content(55%) minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 12.5px; }
+dt { color: var(--muted); overflow-wrap: anywhere; }
+dd { margin: 0; font-family: var(--font-data); text-align: right; overflow-wrap: anywhere; }
+.section { display: grid; gap: 6px; }
+.tag { font-family: var(--font-data); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.note { font-size: 12px; color: var(--muted); margin: 0; }
+.table-wrap { overflow-x: auto; scrollbar-color: var(--line) transparent; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 6px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 500; white-space: nowrap; }
+td { font-family: var(--font-data); font-size: 12px; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+td small { color: var(--muted); display: block; font-size: 11px; }
+.evs { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-family: var(--font-data); font-size: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-data); font-size: 1.15rem; font-weight: 500; }
+.stat span { font-size: 12px; color: var(--muted); }
+.points-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 20px; align-items: start; }
+@media (max-width: 860px) { .points-grid { grid-template-columns: minmax(0, 1fr); } }
+code { font-family: var(--font-data); font-size: 12px; }
+a.addr { font-family: var(--font-data); font-size: 11.5px; color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+a.addr:hover { text-decoration: underline; }
+.addrs { display: grid; gap: 1px; margin-top: 2px; }
+.err-text { color: var(--bad); font-size: 12.5px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Validator Collators Monitor</h1>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="network" role="group" aria-label="Network">
+      <button type="button" data-net="westend">Westend</button>
+      <button type="button" data-net="polkadot">Polkadot</button>
+    </div>
+    <button type="button" class="btn" id="refresh">Refresh now</button>
+    <label><input type="checkbox" id="auto"> Auto-refresh</label>
+    <select id="interval" aria-label="Refresh interval">
+      <option value="15">15 s</option>
+      <option value="30" selected>30 s</option>
+      <option value="60">1 min</option>
+      <option value="300">5 min</option>
+    </select>
+    <label>Reports per chain
+      <select id="reports"><option>3</option><option>5</option><option>10</option></select>
+    </label>
+    <span class="status" id="status">Connecting…</span>
+  </div>
+
+  <section class="panel">
+    <h2>Health</h2>
+    <div class="cols" id="health"></div>
+  </section>
+
+  <div class="cols" id="chains"></div>
+
+  <section class="panel" id="relay"></section>
+
+  <section class="panel" id="points"></section>
+</div>
+
+<script type="module">
+import { Monitor, NETWORKS, overall, fmtAge, toSs58 } from "./validator-collators-monitor.js";
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const paraName = (para) => NETWORKS[netKey].chains.find((d) => d.para === para)?.name ?? `para ${para}`;
+const addr = (a) => {
+  const { ss58, subscan } = NETWORKS[netKey];
+  const x = toSs58(a, ss58);
+  return `<a class="addr" href="${subscan}/account/${x}" target="_blank" rel="noopener">${esc(x)}</a>`;
+};
+const addrs = (list) => `<span class="addrs">${list.map(addr).join("")}</span>`;
+const num = (v) => (v === undefined || v === null ? "–" : Number(v).toLocaleString("en-US"));
+const ago = (ms) => (ms ? `${fmtAge((Date.now() - ms) / 1000)} ago` : "–");
+const dur = (ms) => (ms >= 3_600_000 ? `${+(ms / 3_600_000).toFixed(2)} h` : `${+(ms / 60_000).toFixed(1)} min`);
+const draw = (d) => (!d ? "–" : d.type === "UpTo" ? `UpTo(${d.value})` : d.type);
+const json = (v) => JSON.stringify(v, (_, x) => (typeof x === "bigint" ? x.toString() : x));
+const STATUS = { ok: "OK", warn: "Check", bad: "Problem", na: "Not deployed" };
+
+
+let netKey = new URLSearchParams(location.search).get("network") in NETWORKS
+  ? new URLSearchParams(location.search).get("network") : "westend";
+let monitor = null;
+let generation = 0;
+let busy = false;
+let timer = null;
+
+function dl(rows) {
+  return `<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+}
+
+function renderHealth(snap) {
+  $("health").innerHTML = snap.chains.map((c) => {
+    const st = overall(c);
+    const label = c.error ? "Problem" : !c.deployed ? "Not deployed" : STATUS[st];
+    const items = c.error
+      ? `<li><span class="dot bad"></span><span class="err-text">${esc(c.error)}</span></li>`
+      : c.checks.map((k) => `<li class="${k.status}"><span class="dot"></span>
+          <span>${esc(k.label)}: <b class="val">${esc(k.value)}</b>${k.detail ? ` <span class="detail">(${esc(k.detail)})</span>` : ""}${k.who?.length ? addrs(k.who) : ""}</span></li>`).join("");
+    return `<div class="card ${st}"><div class="card-head"><span>${esc(c.def.name)}</span><span class="pill">${label}</span></div>
+      <ul class="checks">${items}</ul></div>`;
+  }).join("");
+}
+
+function reportCell(r) {
+  if (r.kind === "rotation") return `Skipped<small>session rotation, counts go with the next report</small>`;
+  if (r.kind === "none") return `No report<small>nothing authored, or the report did not fit</small>`;
+  if (r.kind === "BlocksReportFailed") return `BlocksReportFailed<small>kept ${r.value.kept}, dropped ${r.value.dropped}</small>`;
+  return `BlocksReported<small>${r.value.reported} of ${r.value.authors} authors</small>`;
+}
+
+function creditCell(r, self) {
+  const c = r.credit;
+  if (!c) return "–";
+  if (c.status === "nothing") return `<small>nothing sent</small>`;
+  if (c.status === "failed") return `<small>not sent</small>`;
+  if (c.status === "unknown") return `<small>Asset Hub unreachable</small>`;
+  if (c.status === "pending") return `Pending<small>not seen yet from #${c.from}</small>`;
+  if (c.status === "missing") return self ? "Not found" : `Not found<small>#${c.from}–#${c.to}</small>`;
+  const evs = c.events.map((e) => `${e.name} ${e.value.blocks}`).join(", ");
+  const where = self ? "same block" : `#${c.block}, +${Math.round((c.ts - r.ts) / 1000)} s`;
+  return `${esc(evs)}<small>${where}</small>`;
+}
+
+function eraEventText(e) {
+  const v = e.value;
+  switch (e.name) {
+    case "ValidatorSetReceived": return `era ${v.era}, ${v.count} validators`;
+    case "CollatorsDrawn": return `${v.drawn_len} of ${v.external_len}, era ${v.era}${v.new_external ? ", new draw" : ""}`;
+    case "AnnouncementSent": case "AnnouncementFailed": return `to ${paraName(v.destination)}, era ${v.era}`;
+    case "Unexpected": return v.type;
+    default: return v === undefined ? "" : json(v);
+  }
+}
+
+function renderChain(c, ah) {
+  const head = `<div><h2>${esc(c.def.name)} <span class="tag">para ${c.def.para}</span></h2>
+    <span class="tag">${esc(c.def.url)}</span></div>`;
+  if (c.error) return `<section class="panel">${head}<p class="err-text">${esc(c.error)}</p></section>`;
+  const cs = c.collatorSelection;
+  const pc = c.pointsConfig;
+  const pointsRows = pc.error
+    ? [["StakingPointsConverter", "Asset Hub unreachable"]]
+    : pc.converter
+    ? [
+        ["PointsPerService (Collation)", num(pc.pointsPerService)],
+        ["MaxPointsPerService", num(pc.maxPointsPerService)],
+      ]
+    : [["StakingPointsConverter", "not deployed yet"]];
+  const collatorRows = [
+    ["Invulnerables", num(cs.invulnerables)],
+    ["Candidates", `${num(cs.candidates)} <small>(desired ${num(cs.desiredCandidates)})</small>`],
+  ];
+  const liveHead = [
+    ["Best block", `#${num(c.best)}`],
+    ["Last block", ago(c.bestTs)],
+  ];
+  if (!c.deployed) {
+    return `<section class="panel">${head}
+      <div class="section"><h3>Live state</h3>${dl([...liveHead, ["Session.Validators", num(c.sessionCount)]])}</div>
+      <div class="section"><h3>Configuration</h3>${dl([["ValidatorCollators", "not deployed yet"], ...collatorRows, ...pointsRows])}</div>
+    </section>`;
+  }
+  const { config: k, live: l } = c;
+  const config = dl([
+    ["MaxCollators", draw(k.maxCollators)],
+    ["ReportPeriod", `${num(k.period)} blocks`],
+    ["ExpectedEraDuration", dur(k.eraDuration)],
+    ["ReportMargin", dur(k.margin)],
+    ["MaxValidators", num(k.maxValidators)],
+    ["MaxEntriesPerReport", num(k.maxEntries)],
+    ...collatorRows,
+    ...pointsRows,
+  ]);
+  const live = dl([
+    ...liveHead,
+    ["PendingRotation", esc(k.pending)],
+    ["ExternalValidatorSet", l.externalEra === undefined ? "none" : `era ${l.externalEra}, ${num(l.externalCount)}`],
+    ["Set received", ago(k.receivedAt)],
+    ["DrawnCollators", l.drawnEra === undefined ? "none" : `era ${l.drawnEra}, ${l.drawn.length}`],
+    ["Session.Validators", `${num(l.sessionCount)} = ${l.drawnInSession} drawn validators + ${l.sessionCount - l.drawnInSession} invulnerables and candidates`],
+    [`Authored since #${num(l.lastReport)}`, `${l.drawnBlocks} by ${l.drawnAuthors} drawn`],
+    ["Authored by other collators", num(l.otherBlocks)],
+    ["Drawn not authoring lately", l.waiting.length ? addrs(l.waiting) : "0"],
+  ]);
+  const self = c.def.para === 1000;
+  const rows = c.reports.map((r) => `<tr><td>#${num(r.n)}<small>${ago(r.ts)}</small></td><td>${reportCell(r)}</td><td>${creditCell(r, self)}</td></tr>`).join("");
+  const era = c.eraEvents;
+  const evs = era.events.length
+    ? `<ul class="evs">${era.events.map((e) => `<li>#${num(e.n)} ${esc(e.name)} <span class="tag">${esc(eraEventText(e))}</span></li>`).join("")}</ul>`
+    : `<p class="note">None seen in #${num(era.blocks[0])}–#${num(era.blocks[1])}.</p>`;
+  return `<section class="panel">${head}
+    <div class="section"><h3>Live state</h3>${live}</div>
+    <div class="section"><h3>Reports and Asset Hub credit</h3>
+      <div class="table-wrap"><table><thead><tr><th>Block</th><th>Report</th><th>Credit</th></tr></thead><tbody>${rows}</tbody></table></div></div>
+    <div class="section"><h3>Set arrival</h3>${evs}
+      <p class="note">Blocks around ${esc(era.anchor)}.</p></div>
+    <div class="section"><h3>Configuration</h3>${config}</div>
+  </section>`;
+}
+
+function renderRelay(snap) {
+  const r = snap.relay;
+  const head = `<div><h2>Relay chain</h2><span class="tag">${esc(monitor.network.relay.url)}</span></div>`;
+  if (r.error) { $("relay").innerHTML = `${head}<p class="err-text">${esc(r.error)}</p>`; return; }
+  $("relay").innerHTML = `${head}<div class="stats">
+    <div class="stat"><b>#${num(r.best)}</b><span>Best block</span></div>
+    <div class="stat"><b>${num(r.session)}</b><span>Session.CurrentIndex</span></div>
+    <div class="stat"><b>${num(r.validators)}</b><span>Session.Validators</span></div>
+    <div class="stat"><b>${r.drawnActive} of ${r.drawn}</b><span>Drawn validators in the relay set</span></div>
+    <div class="stat"><b>${r.drawn - r.withoutKeys.length} of ${r.drawn}</b><span>Drawn validators with relay Session.NextKeys</span></div>
+  </div>${r.withoutKeys.length ? `<p class="note">Without relay keys: ${addrs(r.withoutKeys)}</p>` : ""}`;
+}
+
+function renderPoints(snap) {
+  const p = snap.ah.points;
+  const el = $("points");
+  if (snap.ah.error || !p) { el.innerHTML = `<h2>Era points</h2><p class="err-text">${esc(snap.ah.error ?? p?.error)}</p>`; return; }
+  if (p.error) { el.innerHTML = `<h2>Era points</h2><p class="err-text">${esc(p.error)}</p>`; return; }
+  const share = p.collationTotal !== undefined && p.total ? `${((100 * p.collationTotal) / p.total).toFixed(1)}%` : "–";
+  const stats = `<div class="stats">
+    <div class="stat"><b>${num(p.era)}</b><span>Active era, started ${ago(snap.ah.eraStart)}</span></div>
+    <div class="stat"><b>${p.byServicePresent ? num(p.collationTotal ?? 0) : "–"}</b><span>ErasRewardPointsByService Collation${p.byServicePresent ? "" : ", not deployed yet"}</span></div>
+    <div class="stat"><b>${num(p.total)}</b><span>ErasRewardPoints total</span></div>
+    <div class="stat"><b>${share}</b><span>Collation share</span></div>
+  </div>`;
+  const perChain = `<div class="section"><h3>Credited this era, per chain</h3>
+    <table><thead><tr><th>Chain</th><th class="num">Reports</th><th class="num">Blocks</th><th class="num">Points</th></tr></thead><tbody>
+    ${p.perChain.map((r) => `<tr><td>${esc(r.name)}</td><td class="num">${r.reports}</td><td class="num">${num(r.blocks)}</td><td class="num">${num(r.points)}</td></tr>`).join("")}
+    </tbody></table><p class="note">From the credits of the reports listed above only.</p></div>`;
+  const top = p.top.slice(0, 15);
+  const topTable = !p.byServicePresent ? "" : `<div class="section"><h3>Collation points per validator (top ${top.length} of ${p.top.length})</h3>
+    <div class="table-wrap"><table><thead><tr><th>Validator</th><th class="num">Collation</th><th class="num">All points</th><th>Drawn on</th></tr></thead><tbody>
+    ${top.map((r) => `<tr><td>${addr(r.who)}</td><td class="num">${num(r.collation)}</td><td class="num">${num(r.total)}</td><td>${esc(r.drawnOn.join(", ") || "–")}</td></tr>`).join("") || `<tr><td colspan="4">No collation points yet.</td></tr>`}
+    </tbody></table></div></div>`;
+  el.innerHTML = `<h2>Era points on Asset Hub</h2>${stats}${snap.ah.converter ? `<div class="points-grid">${perChain}${topTable}</div>` : ""}`;
+}
+
+async function refresh() {
+  if (busy || !monitor) return;
+  busy = true;
+  clearTimeout(timer);
+  const gen = generation;
+  $("refresh").disabled = true;
+  $("status").className = "status";
+  $("status").textContent = "Refreshing…";
+  const t0 = performance.now();
+  try {
+    const snap = await monitor.refresh({ reports: Number($("reports").value) });
+    if (gen !== generation) return;
+    renderHealth(snap);
+    $("chains").innerHTML = snap.chains.map((c) => renderChain(c, snap.ah)).join("");
+    renderRelay(snap);
+    renderPoints(snap);
+    $("status").textContent = `Updated ${new Date(snap.at).toLocaleTimeString()} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
+    window.dispatchEvent(new CustomEvent("monitor:refreshed", { detail: snap }));
+  } catch (e) {
+    if (gen !== generation) return;
+    $("status").className = "status err";
+    $("status").textContent = `Refresh failed: ${e?.message ?? e}`;
+  } finally {
+    if (gen === generation) {
+      busy = false;
+      $("refresh").disabled = false;
+      schedule();
+    }
+  }
+}
+
+function schedule() {
+  clearTimeout(timer);
+  if ($("auto").checked) timer = setTimeout(refresh, Number($("interval").value) * 1000);
+}
+
+function selectNetwork(key) {
+  netKey = key;
+  generation++;
+  busy = false;
+  clearTimeout(timer);
+  monitor?.destroy();
+  monitor = new Monitor(key);
+  document.querySelectorAll("#network button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.net === key)));
+  const url = new URL(location.href);
+  url.searchParams.set("network", key);
+  history.replaceState(null, "", url);
+  for (const id of ["health", "chains", "relay", "points"]) $(id).innerHTML = "";
+  refresh();
+}
+
+document.querySelectorAll("#network button").forEach((b) => b.addEventListener("click", () => b.dataset.net !== netKey && selectNetwork(b.dataset.net)));
+$("refresh").addEventListener("click", refresh);
+$("auto").addEventListener("change", schedule);
+$("interval").addEventListener("change", schedule);
+$("reports").addEventListener("change", refresh);
+selectNetwork(netKey);
+</script>
+</body>
+</html>

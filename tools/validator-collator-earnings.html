@@ -407,7 +407,7 @@ function buildInputs() {
   field(g, "own", "Self-stake share of exposure, %", "median of the last era", 0, 100, 0.01, () => +(inp.own_stake * 100).toFixed(2), (v) => inp.own_stake = v / 100);
   field(g, "w", "Self-stake weight compared with the average validator", "1 = average. In era 2364, 10% of validators were below 0.63 and 10% above 1.37.", 0, 3, 0.01, () => inp.incentive_weight, (v) => inp.incentive_weight = v);
   field(g, "N", "Active validators", "", 20, 1000, 1, () => inp.validators, (v) => inp.validators = Math.round(v));
-  field(g, "relay", "Relay points per era, total as read", "per validator = total / validators scored", 0, 100000000, 10000, () => inp.relay_points_total, (v) => inp.relay_points_total = v);
+  field(g, "relay", "Relay points per validator per era", "", 0, 1000000, 100, () => Math.round(inp.relay_points_total / inp.validators_read), (v) => inp.relay_points_total = v * inp.validators_read);
   field(g, "eras", "Eras per month", "", 1, 31, 1, () => inp.eras_per_month, (v) => inp.eras_per_month = v);
   field(g, "hours", "Era length, hours", "", 1, 48, 1, () => inp.era_hours, (v) => inp.era_hours = v);
 

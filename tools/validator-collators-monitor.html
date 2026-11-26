@@ -91,6 +91,9 @@ code { font-family: var(--font-data); font-size: 12px; }
 a.addr { font-family: var(--font-data); font-size: 11.5px; color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
 a.addr:hover { text-decoration: underline; }
 .addrs { display: grid; gap: 1px; margin-top: 2px; }
+.dl-extra { grid-column: 1 / -1; display: grid; gap: 2px; font-size: 12px; margin-bottom: 4px; }
+.dl-extra summary { cursor: pointer; color: var(--muted); }
+.relay-rows { max-width: 520px; }
 .err-text { color: var(--bad); font-size: 12.5px; overflow-wrap: anywhere; }
 </style>
 </head>
@@ -159,7 +162,7 @@ let busy = false;
 let timer = null;
 
 function dl(rows) {
-  return `<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+  return `<dl>${rows.map(([k, v, extra]) => `<dt>${k}</dt><dd>${v}</dd>${extra ? `<div class="dl-extra">${extra}</div>` : ""}`).join("")}</dl>`;
 }
 
 function renderHealth(snap) {
@@ -204,6 +207,20 @@ function eraEventText(e) {
     case "Unexpected": return v.type;
     default: return v === undefined ? "" : json(v);
   }
+}
+
+function sessionRow(l) {
+  const sp = l.sessionSplit;
+  const groups = [
+    ["drawn validators", sp.drawn, true],
+    ["invulnerables", sp.invulnerables, true],
+    ["candidates", sp.candidates, sp.candidates.length > 0],
+    ["other", sp.other, sp.other.length > 0],
+  ].filter(([, , show]) => show);
+  const value = `${num(l.sessionCount)} = ${groups.map(([name, list]) => `${list.length} ${name}`).join(" + ")}`;
+  const details = groups.filter(([, list]) => list.length)
+    .map(([name, list]) => `<details><summary>${list.length} ${name}</summary>${addrs(list)}</details>`).join("");
+  return ["Session.Validators", value, details];
 }
 
 function renderChain(c, ah) {
@@ -251,7 +268,7 @@ function renderChain(c, ah) {
     ["ExternalValidatorSet", l.externalEra === undefined ? "none" : `era ${l.externalEra}, ${num(l.externalCount)}`],
     ["Set received", ago(k.receivedAt)],
     ["DrawnCollators", l.drawnEra === undefined ? "none" : `era ${l.drawnEra}, ${l.drawn.length}`],
-    ["Session.Validators", `${num(l.sessionCount)} = ${l.drawnInSession} drawn validators + ${l.sessionCount - l.drawnInSession} invulnerables and candidates`],
+    sessionRow(l),
     [`Authored since #${num(l.lastReport)}`, `${l.drawnBlocks} by ${l.drawnAuthors} drawn`],
     ["Authored by other collators", num(l.otherBlocks)],
     ["Drawn not authoring lately", l.waiting.length ? addrs(l.waiting) : "0"],
@@ -276,13 +293,20 @@ function renderRelay(snap) {
   const r = snap.relay;
   const head = `<div><h2>Relay chain</h2><span class="tag">${esc(monitor.network.relay.url)}</span></div>`;
   if (r.error) { $("relay").innerHTML = `${head}<p class="err-text">${esc(r.error)}</p>`; return; }
-  $("relay").innerHTML = `${head}<div class="stats">
-    <div class="stat"><b>#${num(r.best)}</b><span>Best block</span></div>
-    <div class="stat"><b>${num(r.session)}</b><span>Session.CurrentIndex</span></div>
-    <div class="stat"><b>${num(r.validators)}</b><span>Session.Validators</span></div>
-    <div class="stat"><b>${r.drawnActive} of ${r.drawn}</b><span>Drawn validators in the relay set</span></div>
-    <div class="stat"><b>${r.drawn - r.withoutKeys.length} of ${r.drawn}</b><span>Drawn validators with relay Session.NextKeys</span></div>
-  </div>${r.withoutKeys.length ? `<p class="note">Without relay keys: ${addrs(r.withoutKeys)}</p>` : ""}`;
+  const list = (label, items) => (items.length ? `<details><summary>${items.length} ${label}</summary>${addrs(items)}</details>` : "");
+  const rows = [
+    ["Best block", `#${num(r.best)}`],
+    ["Session.CurrentIndex", num(r.session)],
+    ["Relay validators", num(r.validators)],
+    r.announced
+      ? ["Matches announced set", `${r.matching} / ${r.validators} <small>(${esc(r.announced.chain)}, era ${r.announced.era})</small>`,
+          list("relay validators not in the announced set", r.notAnnounced) + list("announced validators not in the relay set", r.notInRelay)]
+      : ["Matches announced set", snap.chains.some((c) => c.deployed) ? "no announced set stored" : "not deployed yet"],
+    ...(r.collating
+      ? [["Collating validators in relay set", `${r.collatingInRelay} / ${r.collating}`, list("collating validators not in the relay set", r.collatingNotInRelay)]]
+      : []),
+  ];
+  $("relay").innerHTML = `${head}<div class="relay-rows">${dl(rows)}</div>`;
 }
 
 function renderPoints(snap) {

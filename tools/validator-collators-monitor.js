@@ -199,23 +199,27 @@ export class Monitor {
     return { network: this.network.label, at: Date.now(), ah, chains, relay };
   }
 
-  // Relay session and, for the validators drawn on any chain, whether the relay chain has their
-  // session keys. One batched read.
+  // Relay session set against the set Asset Hub announced, and against the validators collating
+  // on any system chain.
   async readRelay(chains) {
     const relay = this.relay;
     const validators = (await relay.q("Session.Validators")) ?? [];
-    const active = new Set(validators.map(accountKey));
-    const drawn = [...new Map(chains.flatMap((c) => c.live?.drawn ?? []).map((a) => [accountKey(a), a])).values()];
-    const keys = drawn.length
-      ? await withTimeout(relay.api.query.Session.NextKeys.getValues(drawn.map((a) => [a]), { at: relay.best.hash }), "relay NextKeys")
-      : [];
+    const relayKeys = new Set(validators.map(accountKey));
+    const source = chains.find((c) => c.live?.externalSet);
+    const announced = source?.live.externalSet ?? [];
+    const announcedKeys = new Set(announced.map(accountKey));
+    const collating = [...new Map(chains.flatMap((c) => c.live?.drawn ?? []).map((a) => [accountKey(a), a])).values()];
     return {
       best: relay.best.number,
       session: await relay.q("Session.CurrentIndex"),
       validators: validators.length,
-      drawn: drawn.length,
-      drawnActive: drawn.filter((a) => active.has(accountKey(a))).length,
-      withoutKeys: drawn.filter((_, i) => keys[i] === undefined),
+      announced: source ? { chain: source.def.name, era: source.live.externalEra, count: announced.length } : undefined,
+      matching: validators.filter((a) => announcedKeys.has(accountKey(a))).length,
+      notAnnounced: source ? validators.filter((a) => !announcedKeys.has(accountKey(a))) : [],
+      notInRelay: announced.filter((a) => !relayKeys.has(accountKey(a))),
+      collating: collating.length,
+      collatingInRelay: collating.filter((a) => relayKeys.has(accountKey(a))).length,
+      collatingNotInRelay: collating.filter((a) => !relayKeys.has(accountKey(a))),
     };
   }
 
@@ -236,9 +240,11 @@ export class Monitor {
     const bestTs = await chain.timestamp(best);
     const para = await chain.q("ParachainInfo.ParachainId");
     const base = { def: chain.def, best, bestTs, para };
+    const invulnerables = (await chain.q("CollatorSelection.Invulnerables")) ?? [];
+    const candidates = ((await chain.q("CollatorSelection.CandidateList")) ?? []).map((c) => c.who);
     const collatorSelection = {
-      invulnerables: (await chain.q("CollatorSelection.Invulnerables"))?.length,
-      candidates: (await chain.q("CollatorSelection.CandidateList"))?.length,
+      invulnerables: invulnerables.length,
+      candidates: candidates.length,
       desiredCandidates: await chain.q("CollatorSelection.DesiredCandidates"),
     };
     const conv = this.ah;
@@ -272,6 +278,16 @@ export class Monitor {
     const drawnKeys = new Set(drawn.map(accountKey));
     const sessionKeys = new Set((session ?? []).map(accountKey));
     const drawnInSession = drawn.filter((a) => sessionKeys.has(accountKey(a)));
+    // Session members by origin, each counted once: drawn first, then invulnerables, then candidates.
+    const inList = (list) => new Set(list.map(accountKey));
+    const [invKeys, candKeys] = [inList(invulnerables), inList(candidates)];
+    const notDrawn = (session ?? []).filter((a) => !drawnKeys.has(accountKey(a)));
+    const sessionSplit = {
+      drawn: drawnInSession,
+      invulnerables: notDrawn.filter((a) => invKeys.has(accountKey(a))),
+      candidates: notDrawn.filter((a) => !invKeys.has(accountKey(a)) && candKeys.has(accountKey(a))),
+      other: notDrawn.filter((a) => !invKeys.has(accountKey(a)) && !candKeys.has(accountKey(a))),
+    };
 
     const lastReport = Math.floor(best / period) * period;
     const authored = (await chain.entries("ValidatorCollators.AuthoredBlocks")) ?? [];
@@ -307,8 +323,10 @@ export class Monitor {
         drawn,
         externalEra: external?.era,
         externalCount: external?.validators?.length,
+        externalSet: external?.validators,
         sessionCount: session?.length,
         drawnInSession: drawnInSession.length,
+        sessionSplit,
         lastReport,
         blocksSince: best - lastReport,
         drawnAuthors: byDrawn.length,

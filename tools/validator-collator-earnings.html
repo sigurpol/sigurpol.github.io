@@ -52,7 +52,7 @@ h2 { font-family: var(--font-display); font-weight: 500; font-size: 0.95rem; mar
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; }
 .rail { display: grid; gap: 14px; min-width: 0; }
 .results { display: grid; gap: 16px; min-width: 0; }
-.field { display: grid; grid-template-columns: minmax(0, 1fr) 96px 68px; gap: 4px 8px; align-items: center; }
+.field { display: grid; grid-template-columns: minmax(0, 1fr) 96px 84px; gap: 4px 8px; align-items: center; }
 .field .unit { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .field label { font-size: 12.5px; color: var(--fg); }
 .field label small { color: var(--muted); display: block; font-size: 11px; }
@@ -120,6 +120,10 @@ code { font-family: var(--font-data); font-size: 12px; }
         <div class="gov-chain" id="dap">
           <div class="chain-head"><b>DAP budget allocation (<code>Dap.BudgetAllocation</code>)</b></div>
           <p class="note">Live on Polkadot.</p>
+        </div>
+        <div class="gov-chain" id="ops">
+          <div class="chain-head"><b>Operational costs</b></div>
+          <p class="note">Not in DAP yet. Proposed: about 2,000 dotUSD per validator per month.</p>
         </div>
         <div id="gov-rows" class="gov-rows"></div>
         <button type="button" id="reset-gov" class="btn">Reset governance parameters</button>
@@ -197,7 +201,7 @@ function defaultInputs(d) {
     dap_staker_rewards: d.dap_staker_rewards, dap_validator_incentive: d.dap_validator_incentive,
     own_stake: d.own_stake, incentive_weight: 1, validators: d.validators, relay_points_total: d.relay_points_total,
     validators_read: d.validators_read, eras_per_month: 30,
-    era_hours: 24, metanode_cost_usd: METANODE_COST_USD, chains };
+    era_hours: 24, metanode_cost_usd: METANODE_COST_USD, operational_dotusd: 0, chains };
 }
 
 // Multiplier k on all PointsPerService where E V (R + k S) / (N R + k C1) = M. Earnings are monotonic in k.
@@ -208,11 +212,12 @@ function breakeven(E, V, R, N, S, C1, M) {
   return { k: denom > 0 ? R * (M * N - E * V) / denom : null, limit };
 }
 
-// validator_incentive share s where monthly earnings dotPerValue * (pot own + w I s) = cost. Linear in s.
-function shareBreakeven(inp, dotPerValue, pot, cost) {
+// validator_incentive share s where dotPerValue * (pot own + ops + w I s) = cost. Linear in s.
+function shareBreakeven(inp, dotPerValue, pot, ops, cost) {
   const perShare = inp.incentive_weight * inp.issuance_per_era;
-  const covered = dotPerValue * (pot * inp.own_stake + perShare * inp.dap_validator_incentive) >= cost;
-  const share = dotPerValue > 0 && perShare > 0 ? (cost / dotPerValue - pot * inp.own_stake) / perShare : null;
+  const fixed = pot * inp.own_stake + ops;
+  const covered = dotPerValue * (fixed + perShare * inp.dap_validator_incentive) >= cost;
+  const share = dotPerValue > 0 && perShare > 0 ? (cost / dotPerValue - fixed) / perShare : null;
   return { share, covered, max: 1 - inp.dap_staker_rewards };
 }
 
@@ -223,8 +228,10 @@ function world(inp, collate) {
   const E = inp.eras_per_month;
   const pot = inp.issuance_per_era * inp.dap_staker_rewards;
   const budget = inp.incentive_weight * inp.issuance_per_era * inp.dap_validator_incentive;
-  const grossV = pot + budget;
-  const opV = pot * inp.own_stake + budget;
+  // Operational costs: a dotUSD pool of N x amount per month, paid by era points, valued in DOT here.
+  const ops = N * inp.operational_dotusd / E / inp.dot_price;
+  const grossV = pot + budget + ops;
+  const opV = pot * inp.own_stake + budget + ops;
   const cost = inp.metanode_cost_usd / inp.dot_price;
 
   const chains = {};
@@ -250,7 +257,8 @@ function world(inp, collate) {
     baseline: { gross: E * grossV / N, operator: E * opV / N },
     me: { gross: E * (R + S) * grossPt, operator: E * (R + S) * opPt },
     breakeven: breakeven(E, opV, R, N, S, C, cost),
-    share_breakeven: shareBreakeven(inp, E * (R + S) / P, pot, cost),
+    share_breakeven: shareBreakeven(inp, E * (R + S) / P, pot, ops, cost),
+    operational: E * (R + S) / P * ops,
     chains,
   };
 }
@@ -266,7 +274,9 @@ function model(inp) {
     R: selection.R, C: selection.C, P: selection.P, collation_share: selection.collation_share,
     cost, baseline: selection.baseline, chains: selection.chains,
     options: { everywhere: option(everywhere), validate_only: option(validateOnly), selection: option(selection) },
-    pots: { staker: inp.issuance_per_era * inp.dap_staker_rewards, incentive: inp.issuance_per_era * inp.dap_validator_incentive },
+    pots: { staker: inp.issuance_per_era * inp.dap_staker_rewards, incentive: inp.issuance_per_era * inp.dap_validator_incentive,
+      operational_usd: inp.validators * inp.operational_dotusd / inp.eras_per_month },
+    operational_everywhere: everywhere.operational,
     network_cost_usd: inp.validators * inp.metanode_cost_usd,
     breakeven: everywhere.breakeven,
     share_breakeven: everywhere.share_breakeven,
@@ -288,7 +298,7 @@ const signedUsd = (dot) => `<span class="${dot < 0 ? "neg" : "pos"}">${dot < 0 ?
 
 const syncers = [];
 // A trailing ", <unit>" in the label is shown as a unit after the number box.
-const UNITS = { "DOT": "DOT", "%": "%", "USD": "USD", "USD per month": "USD/month", "hours": "hours" };
+const UNITS = { "DOT": "DOT", "%": "%", "USD": "USD", "USD per month": "USD/month", "hours": "hours", "dotUSD/month": "dotUSD/month" };
 function splitUnit(label) {
   const i = label.lastIndexOf(", ");
   const unit = i < 0 ? undefined : UNITS[label.slice(i + 2)];
@@ -327,7 +337,7 @@ function checkbox(parent, id, text, hint, get, set) {
 function resetGovernance() {
   for (const [name, c] of Object.entries(inp.chains)) { c.pps = WESTEND_PPS[name]; c.cap = WESTEND_CAP; }
   Object.assign(inp, { issuance_per_era: BAKED.issuance_per_era, dap_staker_rewards: BAKED.dap_staker_rewards,
-    dap_validator_incentive: BAKED.dap_validator_incentive });
+    dap_validator_incentive: BAKED.dap_validator_incentive, operational_dotusd: 0 });
 }
 
 function buildDap() {
@@ -362,6 +372,8 @@ function buildDap() {
 
 function buildGovernance() {
   buildDap();
+  field(document.getElementById("ops"), "ops", "Operational costs per validator, dotUSD/month", "", 0, 10000, 50,
+    () => inp.operational_dotusd, (v) => inp.operational_dotusd = v);
   const rows = document.getElementById("gov-rows");
   for (const name of Object.keys(inp.chains)) {
     const c = () => inp.chains[name];
@@ -537,13 +549,15 @@ function render() {
   {
     // Split of the gross reward of a validator that collates on every chain.
     const pot = out.pots.staker, budget = inp.incentive_weight * out.pots.incentive;
-    const gross = out.options.everywhere.gross;
+    const fromOps = out.operational_everywhere;
+    const gross = out.options.everywhere.gross - fromOps;
     const fromStakers = gross * pot / (pot + budget), fromIncentive = gross - fromStakers;
     const own = inp.own_stake;
     document.getElementById("split").textContent =
       `Gross is the whole reward of a validator, nominators included. For a validator that collates on every chain, ` +
       `staker_rewards pay ${usd(fromStakers)} per month: ${usd(fromStakers * (1 - own))} (${nf((1 - own) * 100, 1)}%) to its nominators ` +
       `and ${usd(fromStakers * own)} (${nf(own * 100, 1)}%) to the validator. validator_incentive pays ${usd(fromIncentive)}, all to the validator. ` +
+      (inp.operational_dotusd > 0 ? `Operational costs pay ${usd(fromOps)}, all to the validator. ` : "") +
       `Net is validator earnings minus the metanode cost.`;
   }
   document.getElementById("dap-staker-out").textContent = `Staker pot ${nf(out.pots.staker)} DOT per era`;

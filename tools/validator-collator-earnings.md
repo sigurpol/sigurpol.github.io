@@ -57,10 +57,26 @@ change in the middle. The `staker_rewards` share stayed at 45.2%. The buffer too
 The tool lets the issuance and both shares be changed. Whatever the two shares leave goes to the
 buffer and other recipients, which do not affect validator earnings.
 
+## Operational costs
+
+Operational costs are a third income for validators only. They are meant to pay for a metanode's
+fixed costs, such as network, hardware and electricity. They are paid in dotUSD, Polkadot's
+stablecoin, where 1 dotUSD is 1 USD. The planned level is about 2,000 dotUSD per validator per month.
+
+They are not in DAP or in the SDK yet, so the tool treats them as an input with a default of 0.
+
+The pool per era is the number of active validators times the amount, divided by the eras per
+month. It is paid by era points, like the other budgets, without self-stake weighting. Nominators
+get none of it. A validator with average points receives exactly the amount. A validator with more
+points, for example one picked for collation more often, receives more.
+
+The tables show all earnings in DOT and USD. Operational costs are converted to DOT with the DOT
+price, so their USD value does not move with the price.
+
 ## How validator earnings are computed
 
 **Validator earnings** are the self-stake share of the staker pot plus the validator's share of
-the incentive budget. Nominators' rewards are not included. The tool also shows the **gross**
+the incentive budget and of the operational costs. Nominators' rewards are not included. The tool also shows the **gross**
 amount, the validator's whole share of the reward with nominators included.
 
 Both pots are shared by era points. A validator with a larger share of the era's points gets a
@@ -70,13 +86,14 @@ are treated as average.
 For one era:
 
 - `P` is the total of all era points.
-- `pot` is the staker pot and `budget` the incentive budget.
+- `pot` is the staker pot, `budget` the incentive budget and `ops` the operational costs pool, all
+  in DOT per era.
 - `own` is the validator's self-stake share of its exposure.
 - `w` is the validator's incentive weight divided by the mean weight. In era 2364 the 10th
   percentile was 0.63 and the 90th was 1.37. The default is 1.
 
-Then one era point is worth `(pot + w·budget) / P` gross and `(pot·own + w·budget) / P` in
-validator earnings. A month is the era amount times the eras per month, 30 by default.
+Then one era point is worth `(pot + w·budget + ops) / P` gross and `(pot·own + w·budget + ops) / P`
+in validator earnings. A month is the era amount times the eras per month, 30 by default.
 
 ### Relay points
 
@@ -148,11 +165,12 @@ With `E` eras per month, `R + S` the validator's era points (relay plus its aver
 points), `P` the total era points, `I` the issuance per era and `M` the metanode cost in DOT:
 
 ```
-E·(R + S) / P · (pot·own + w·I·s) = M
-s = (M·P / (E·(R + S)) − pot·own) / (w·I)
+E·(R + S) / P · (pot·own + ops + w·I·s) = M
+s = (M·P / (E·(R + S)) − pot·own − ops) / (w·I)
 ```
 
-If the current earnings already cover `M`, the tool says so. If `s` is more than what
+If the current earnings already cover `M`, the tool says so. That includes the case where
+operational costs alone cover it, so `s` would be below 0. If `s` is more than what
 `staker_rewards` leaves (100% minus that share), the share alone can't cover the cost. At the
 defaults `s` is about 20.2%, against 12.1% today.
 
@@ -174,7 +192,7 @@ E·V·(R + k·S) / (N·R + k·C1) = M
 k = R·(M·N − E·V) / (E·V·S − M·C1)
 ```
 
-Here `V = pot·own + w·budget`. Earnings rise with `k` towards `E·V·S / C1`. If that limit is not
+Here `V = pot·own + w·budget + ops`. Earnings rise with `k` towards `E·V·S / C1`. If that limit is not
 above `M`, points per block alone can't cover the cost.
 
 ## Assumptions
@@ -200,3 +218,5 @@ proposals. The defaults are the Westend values.
 
 - `MaxCollators`: `UpTo(20)` on each chain.
 - `PointsPerService (para, Collation)`: 20 on Asset Hub, 10 on People, 20 on Bulletin.
+
+Operational costs are not on Polkadot yet either. Their default is 0.

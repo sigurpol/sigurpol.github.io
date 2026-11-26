@@ -77,6 +77,36 @@ more often, receives more.
 The tables show all earnings in DOT and USD. Operational costs are converted to DOT with the DOT
 price, so their USD value does not move with the price.
 
+### Collateral check
+
+The metanode budget doc ("Polkadot Issuance Outlook & New Budget for Metanodes", v4) plans to mint the
+dotUSD for operational costs against DOT from the DAP buffer. The DOT is locked as collateral at a
+200% collateral ratio, with liquidation at 120%. It is not spent. The doc counts one year of
+collateral as locked for the whole period, with no repayment. The tool follows that.
+
+The check is optional and does not change validator earnings. It only tests whether the DAP can fund
+the salaries. A year has 365 days, so a year has 365 eras of 24 hours. Per year:
+
+- Salaries are the operational costs per era times the eras per year, in dotUSD.
+- The buffer inflow is the issuance per year times the buffer share (100% minus the two DOT shares).
+- DOT locked = salaries × collateral ratio ÷ DOT price.
+- Share of the buffer inflow = locked ÷ inflow.
+- Surplus or shortfall = inflow − locked. A shortfall comes out of the buffer balance.
+- Break-even DOT price = salaries × collateral ratio ÷ inflow, the price at which locked equals inflow.
+- Liquidation price = liquidation ratio × salaries ÷ (buffer balance + inflow). This assumes the whole
+  buffer stands behind the debt, today's balance plus one year of inflow. The collateral is part of
+  that inflow. On collateral alone the liquidation price is liquidation ratio ÷ collateral ratio ×
+  DOT price.
+
+The buffer balance is the free balance of the DAP buffer account on Asset Hub,
+`13UVJyLkAxdQn6zM3GrLGvrFgN9jWneRX2NGvf3u92iunZq1` (`modl` + `dap/buff`). It held about 7.99M DOT on
+2026-11-26.
+
+With the doc's inputs (55.93M DOT issuance per year, shares 45.2% / 5.1% / 49.7%, 320 validators at
+2,000 USD per month, DOT at $1.00, buffer balance 4.96M DOT) the tool gives 15.36M DOT locked per
+year, 55% of the inflow, a break-even price of $0.55, a liquidation price of $0.28 with the buffer and
+$0.60 on collateral alone, and a surplus of 12.4M DOT per year. These match the doc.
+
 ## How validator earnings are computed
 
 **Validator earnings** are the self-stake share of the staker pot plus the validator's share of

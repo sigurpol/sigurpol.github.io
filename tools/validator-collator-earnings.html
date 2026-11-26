@@ -14,6 +14,7 @@
   --accent-soft: #fbe3ef;
   --good: #1f7a4d;
   --bad: #b3261e;
+  --warn: #a15c00;
   --c1: #d6006f;
   --c2: #3d5ccc;
   --c3: #b7791f;
@@ -24,13 +25,13 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #141218; --surface: #1d1a22; --fg: #ece9f1; --muted: #a29bad; --line: #322e3a;
-    --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --bad: #ff8a80;
+    --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --bad: #ff8a80; --warn: #f0b35a;
     --c1: #ff4fa3; --c2: #7f9bff; --c3: #e3b04b; color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
   --bg: #141218; --surface: #1d1a22; --fg: #ece9f1; --muted: #a29bad; --line: #322e3a;
-  --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --bad: #ff8a80;
+  --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --bad: #ff8a80; --warn: #f0b35a;
   --c1: #ff4fa3; --c2: #7f9bff; --c3: #e3b04b; color-scheme: dark;
 }
 body {
@@ -72,7 +73,12 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .me small { color: var(--muted); display: block; font-size: 11px; }
 .tag { font-family: var(--font-data); font-size: 11px; color: var(--muted); }
 .note { font-size: 12px; color: var(--muted); margin: 0; }
-.neg { color: var(--bad); } .pos { color: var(--good); }
+.neg { color: var(--bad); } .pos { color: var(--good); } .warn { color: var(--warn); }
+.mint-box { display: grid; gap: 14px; }
+.mint-out { display: grid; gap: 4px; }
+.mint-out p { margin: 0; }
+.mint-status { margin-top: 4px; }
+#t-mint tr.neg td { color: var(--bad); }
 .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; border-radius: 0 8px 8px 0; margin: 0; display: grid; gap: 4px; }
 .callout p, .opt-notes p { margin: 0; }
 .opt-notes .be-line { color: var(--fg); }
@@ -144,6 +150,13 @@ code { font-family: var(--font-data); font-size: 12px; }
         <div class="opt-notes" id="opt-notes"></div>
       </section>
 
+      <section class="panel" id="mint-panel" hidden>
+        <h2>Paying operational costs from the DAP buffer</h2>
+        <div class="table-wrap"><table id="t-mint"></table></div>
+        <p class="note" id="mint-formula"></p>
+        <div class="mint-out" id="mint-out"></div>
+      </section>
+
       <section class="panel">
         <h2>Per validator, average per month</h2>
         <div class="table-wrap"><table id="t-main"></table></div>
@@ -170,6 +183,7 @@ const BAKED = {
   issuance_per_era: 153131.94,
   dap_staker_rewards: 0.452,
   dap_validator_incentive: 0.121,
+  dap_buffer_balance: 7985808.68,
   relay_points_total: 41595272,
   validators_read: 399.6,
   validators: 320,
@@ -186,6 +200,8 @@ const MAX_PPS = 1000;
 const WESTEND_PPS = { "asset-hub": 20, "people": 10, "bulletin": 20 };
 const WESTEND_CAP = 20;
 const METANODE_COST_USD = 2000;
+const COLLATERAL_RATIO = 2.0;
+const LIQUIDATION_RATIO = 1.2;
 
 function defaultInputs(d) {
   const chains = {};
@@ -197,7 +213,9 @@ function defaultInputs(d) {
     dap_staker_rewards: d.dap_staker_rewards, dap_validator_incentive: d.dap_validator_incentive,
     own_stake: d.own_stake, incentive_weight: 1, validators: d.validators, relay_points_total: d.relay_points_total,
     validators_read: d.validators_read, eras_per_month: 30,
-    era_hours: 24, metanode_cost_usd: METANODE_COST_USD, dap_operational_dotusd: 0, chains };
+    era_hours: 24, metanode_cost_usd: METANODE_COST_USD, dap_operational_dotusd: 0,
+    mint_collateral: false, collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO,
+    dap_buffer_balance: d.dap_buffer_balance, chains };
 }
 
 // Multiplier k on all PointsPerService where E V (R + k S) / (N R + k C1) = M. Earnings are monotonic in k.
@@ -215,6 +233,28 @@ function shareBreakeven(inp, dotPerValue, pot, ops, cost) {
   const covered = dotPerValue * (fixed + perShare * inp.dap_validator_incentive) >= cost;
   const share = dotPerValue > 0 && perShare > 0 ? (cost / dotPerValue - fixed) / perShare : null;
   return { share, covered, max: 1 - inp.dap_staker_rewards };
+}
+
+// Can the DAP buffer back operational_costs minted as dotUSD? One year of collateral counts as locked.
+function collateral(inp) {
+  const erasYear = 365 * 24 / inp.era_hours;
+  const inflow = inp.issuance_per_era * Math.max(1 - inp.dap_staker_rewards - inp.dap_validator_incentive, 0) * erasYear;
+  const debt = inp.dap_operational_dotusd * erasYear;
+  const locked = debt * inp.collateral_ratio / inp.dot_price;
+  const surplus = inflow - locked;
+  const backing = inp.dap_buffer_balance + inflow; // the collateral comes out of the inflow
+  const liqBuffer = backing > 0 ? inp.liquidation_ratio * debt / backing : null;
+  const status = liqBuffer !== null && inp.dot_price < liqBuffer ? "liquidation"
+    : surplus >= 0 ? "ok" : -surplus <= inp.dap_buffer_balance ? "buffer" : "short";
+  return {
+    eras_per_year: erasYear, inflow_year: inflow, debt_year: debt,
+    locked_era: locked / erasYear, locked_year: locked,
+    inflow_share: inflow > 0 ? locked / inflow : null, surplus_year: surplus,
+    breakeven_price: inflow > 0 ? debt * inp.collateral_ratio / inflow : null,
+    liquidation_price_buffer: liqBuffer,
+    liquidation_price_collateral: inp.liquidation_ratio / inp.collateral_ratio * inp.dot_price,
+    status,
+  };
 }
 
 // One era with the validator's collation choice per chain. The other validators follow the chain settings.
@@ -276,6 +316,7 @@ function model(inp) {
     network_cost_usd: inp.validators * inp.metanode_cost_usd,
     breakeven: everywhere.breakeven,
     share_breakeven: everywhere.share_breakeven,
+    collateral: collateral(inp),
   };
 }
 if (typeof module !== "undefined") module.exports = { BAKED, defaultInputs, model };
@@ -333,7 +374,8 @@ function checkbox(parent, id, text, hint, get, set) {
 function resetGovernance() {
   for (const [name, c] of Object.entries(inp.chains)) { c.pps = WESTEND_PPS[name]; c.cap = WESTEND_CAP; }
   Object.assign(inp, { issuance_per_era: BAKED.issuance_per_era, dap_staker_rewards: BAKED.dap_staker_rewards,
-    dap_validator_incentive: BAKED.dap_validator_incentive, dap_operational_dotusd: 0 });
+    dap_validator_incentive: BAKED.dap_validator_incentive, dap_operational_dotusd: 0, mint_collateral: false,
+    collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO, dap_buffer_balance: BAKED.dap_buffer_balance });
 }
 
 function buildDap() {
@@ -372,6 +414,14 @@ function buildDap() {
     <input type="number" id="ops-per-validator" disabled><span class="unit">dotUSD/month</span>
     <input type="range" id="ops-per-validator-r" min="0" max="10000" step="1" disabled aria-label="Per validator, dotUSD/month">`;
   box.appendChild(perVal);
+  checkbox(box, "mint", "Mint operational costs as dotUSD against the DAP buffer", "", () => inp.mint_collateral, (v) => inp.mint_collateral = v);
+  const mint = document.createElement("div");
+  mint.id = "mint-box";
+  mint.className = "mint-box";
+  box.appendChild(mint);
+  field(mint, "cr", "Collateral ratio, %", "", 100, 500, 5, () => +(inp.collateral_ratio * 100).toFixed(1), (v) => inp.collateral_ratio = v / 100);
+  field(mint, "lr", "Liquidation ratio, %", "", 100, 300, 5, () => +(inp.liquidation_ratio * 100).toFixed(1), (v) => inp.liquidation_ratio = v / 100);
+  field(mint, "buffer-balance", "DAP buffer balance, DOT", "", 0, 50000000, 10000, () => Math.round(inp.dap_buffer_balance), (v) => inp.dap_buffer_balance = v);
   const out = document.createElement("p");
   out.className = "note gov-out neg";
   out.id = "dap-out";
@@ -542,6 +592,34 @@ function breakevenLines(out) {
   return [first, `Or points per block of ${names.map((n) => nf(k * out.chains[n].pps, 1)).join(" / ")} on ${names.map((n) => SHORT[n]).join(" / ")}, about ${nf(k, 2)} times today's values.${over}`];
 }
 
+// The collateral check in the results column: a per-era and per-year table, then three short lines.
+function renderCollateral(c) {
+  const price = (v) => v === null ? "n/a" : `$${nf(v, 2)}`, mdot = (v) => `${nf(v / 1e6, 2)}M DOT`;
+  const perEra = (v) => `${nf(v / c.eras_per_year)} DOT`;
+  const short = c.surplus_year < 0;
+  document.getElementById("t-mint").innerHTML =
+    "<tr><th></th><th>Per era</th><th>Per year</th></tr>" +
+    `<tr><td>Buffer inflow</td><td>${perEra(c.inflow_year)}</td><td>${mdot(c.inflow_year)}</td></tr>` +
+    `<tr><td>Collateral needed</td><td>${perEra(c.locked_year)}</td><td>${mdot(c.locked_year)}</td></tr>` +
+    `<tr class="${short ? "neg" : ""}"><td>${short ? "Shortfall" : "Left in the buffer"}</td><td>${perEra(Math.abs(c.surplus_year))}</td><td>${mdot(Math.abs(c.surplus_year))}</td></tr>`;
+  document.getElementById("mint-formula").textContent =
+    `Collateral needed = operational_costs × collateral ratio ÷ DOT price (${nf(inp.dap_operational_dotusd)} dotUSD × ${nf(inp.collateral_ratio * 100)}% at $${nf(inp.dot_price, 3)}).`;
+  const status = {
+    ok: ["pos", `The buffer inflow covers the collateral. ${mdot(c.surplus_year)} per year stay in the buffer.`],
+    buffer: ["warn", `The collateral exceeds the buffer inflow by ${mdot(-c.surplus_year)} per year. The buffer balance of ${mdot(inp.dap_buffer_balance)} covers it.`],
+    short: ["neg", `The collateral exceeds the buffer inflow by ${mdot(-c.surplus_year)} per year, more than the buffer balance of ${mdot(inp.dap_buffer_balance)}.`],
+    liquidation: ["neg", `The DOT price is below the liquidation price of ${price(c.liquidation_price_buffer)}. The collateral would be liquidated.`],
+  }[c.status];
+  const share = c.inflow_share === null ? "n/a" : `${nf(c.inflow_share * 100, 0)}%`;
+  const cover = c.breakeven_price === null ? ""
+    : short ? ` The inflow would cover it with DOT above ${price(c.breakeven_price)}.` : ` The inflow covers it while DOT stays above ${price(c.breakeven_price)}.`;
+  document.getElementById("mint-out").innerHTML = [
+    `<p>Collateral uses ${share} of the buffer inflow.${cover}</p>`,
+    `<p>Liquidation if DOT falls below ${price(c.liquidation_price_buffer)} with the whole buffer behind the debt, or ${price(c.liquidation_price_collateral)} on collateral alone.</p>`,
+    `<p class="mint-status ${status[0]}">${status[1]}</p>`,
+  ].join("");
+}
+
 function render() {
   syncers.forEach((s) => s());
   const out = model(inp);
@@ -554,6 +632,9 @@ function render() {
   document.getElementById("dap-buffer-r").value = restPct;
   document.getElementById("ops-per-validator").value = Math.round(out.pots.operational_per_validator);
   document.getElementById("ops-per-validator-r").value = out.pots.operational_per_validator;
+  document.getElementById("mint-box").hidden = !inp.mint_collateral;
+  document.getElementById("mint-panel").hidden = !inp.mint_collateral;
+  if (inp.mint_collateral) renderCollateral(out.collateral);
   {
     // Split of the gross reward of a validator that collates on every chain.
     const pot = out.pots.staker, budget = inp.incentive_weight * out.pots.incentive;

@@ -79,6 +79,7 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .mint-out p { margin: 0; }
 .mint-status { margin-top: 4px; }
 #t-mint tr.neg td { color: var(--bad); }
+.mint-h3 { font-family: var(--font-display); font-weight: 500; font-size: 0.85rem; margin: 6px 0 0; }
 .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; border-radius: 0 8px 8px 0; margin: 0; display: grid; gap: 4px; }
 .callout p, .opt-notes p { margin: 0; }
 .opt-notes .be-line { color: var(--fg); }
@@ -155,6 +156,9 @@ code { font-family: var(--font-data); font-size: 12px; }
         <div class="table-wrap"><table id="t-mint"></table></div>
         <p class="note" id="mint-formula"></p>
         <div class="mint-out" id="mint-out"></div>
+        <h3 class="mint-h3" id="mint-years-title"></h3>
+        <div class="table-wrap"><table id="t-mint-years"></table></div>
+        <div class="mint-out" id="mint-years-out"></div>
       </section>
 
       <section class="panel">
@@ -202,6 +206,11 @@ const WESTEND_CAP = 20;
 const METANODE_COST_USD = 2000;
 const COLLATERAL_RATIO = 2.0;
 const LIQUIDATION_RATIO = 1.2;
+const HORIZON_YEARS = 3;
+// Issuance steps toward the 2.1B cap (metanode budget doc v4): 26.28% lower from ~15 Mar 2028 and again
+// from ~18 Mar 2030. Day offsets count from the read date 2026-11-26.
+const ISSUANCE_STEP_DAYS = [475, 1208];
+const ISSUANCE_STEP_FACTOR = 1 - 0.2628;
 
 function defaultInputs(d) {
   const chains = {};
@@ -215,7 +224,7 @@ function defaultInputs(d) {
     validators_read: d.validators_read, eras_per_month: 30,
     era_hours: 24, metanode_cost_usd: METANODE_COST_USD, dap_operational_dotusd: 0,
     mint_collateral: false, collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO,
-    dap_buffer_balance: d.dap_buffer_balance, chains };
+    dap_buffer_balance: d.dap_buffer_balance, interest_rate: 0, horizon_years: HORIZON_YEARS, chains };
 }
 
 // Multiplier k on all PointsPerService where E V (R + k S) / (N R + k C1) = M. Earnings are monotonic in k.
@@ -235,25 +244,58 @@ function shareBreakeven(inp, dotPerValue, pot, ops, cost) {
   return { share, covered, max: 1 - inp.dap_staker_rewards };
 }
 
-// Can the DAP buffer back operational_costs minted as dotUSD? One year of collateral counts as locked.
+// Buffer inflow in year `year` (1-based) from the read date, pro-rated across issuance steps.
+function yearInflow(inp, year, erasYear, share) {
+  const start = (year - 1) * 365, end = year * 365;
+  let total = 0, prev = 0;
+  [...ISSUANCE_STEP_DAYS, Infinity].forEach((change, step) => {
+    const days = Math.max(Math.min(end, change) - Math.max(start, prev), 0);
+    total += days / 365 * erasYear * inp.issuance_per_era * ISSUANCE_STEP_FACTOR ** step * share;
+    prev = change;
+  });
+  return total;
+}
+
+// Can the DAP buffer back operational_costs minted as dotUSD? Minting salaries is borrowing.
 function collateral(inp) {
   const erasYear = 365 * 24 / inp.era_hours;
-  const inflow = inp.issuance_per_era * Math.max(1 - inp.dap_staker_rewards - inp.dap_validator_incentive, 0) * erasYear;
+  const share = Math.max(1 - inp.dap_staker_rewards - inp.dap_validator_incentive, 0);
+  const price = inp.dot_price, cr = inp.collateral_ratio, lr = inp.liquidation_ratio, rate = inp.interest_rate;
+  const inflow = inp.issuance_per_era * share * erasYear;
   const debt = inp.dap_operational_dotusd * erasYear;
-  const locked = debt * inp.collateral_ratio / inp.dot_price;
-  const surplus = inflow - locked;
-  const backing = inp.dap_buffer_balance + inflow; // the collateral comes out of the inflow
-  const liqBuffer = backing > 0 ? inp.liquidation_ratio * debt / backing : null;
-  const status = liqBuffer !== null && inp.dot_price < liqBuffer ? "liquidation"
+  const locked = debt * cr / price;
+  const interest = debt * rate / price;
+  const surplus = inflow - locked - interest;
+  const backing = inp.dap_buffer_balance + inflow - interest; // the collateral comes out of the inflow
+  const liqBuffer = backing > 0 ? lr * debt / backing : null;
+  const status = liqBuffer === null || price < liqBuffer ? "liquidation"
     : surplus >= 0 ? "ok" : -surplus <= inp.dap_buffer_balance ? "buffer" : "short";
+
+  const years = [];
+  let cumInflow = 0, cumInterest = 0, runsOut = null;
+  for (let y = 1; y <= inp.horizon_years; y++) {
+    const cumDebt = debt * y;
+    const yLocked = cumDebt * cr / price;
+    const yInterest = cumDebt * rate / price;
+    const yInflow = yearInflow(inp, y, erasYear, share);
+    cumInflow += yInflow;
+    cumInterest += yInterest;
+    const free = inp.dap_buffer_balance + cumInflow - yLocked - cumInterest;
+    const backingY = yLocked + free;
+    const liq = backingY > 0 ? lr * cumDebt / backingY : null;
+    const yStatus = free < 0 || liq === null || price < liq ? "red" : yInflow >= debt * cr / price + yInterest ? "green" : "amber";
+    if (free < 0 && runsOut === null) runsOut = y;
+    years.push({ year: y, minted: debt, debt: cumDebt, collateral: yLocked, interest: yInterest,
+      inflow: yInflow, free, liquidation_price: liq, status: yStatus });
+  }
   return {
     eras_per_year: erasYear, inflow_year: inflow, debt_year: debt,
-    locked_era: locked / erasYear, locked_year: locked,
+    locked_era: locked / erasYear, locked_year: locked, interest_year: interest,
     inflow_share: inflow > 0 ? locked / inflow : null, surplus_year: surplus,
-    breakeven_price: inflow > 0 ? debt * inp.collateral_ratio / inflow : null,
+    breakeven_price: inflow > 0 ? debt * (cr + rate) / inflow : null,
     liquidation_price_buffer: liqBuffer,
-    liquidation_price_collateral: inp.liquidation_ratio / inp.collateral_ratio * inp.dot_price,
-    status,
+    liquidation_price_collateral: lr / cr * price,
+    status, years, runs_out_year: runsOut,
   };
 }
 
@@ -335,7 +377,7 @@ const signedUsd = (dot) => `<span class="${dot < 0 ? "neg" : "pos"}">${dot < 0 ?
 
 const syncers = [];
 // A trailing ", <unit>" in the label is shown as a unit after the number box.
-const UNITS = { "DOT": "DOT", "%": "%", "USD": "USD", "USD per month": "USD/month", "hours": "hours", "dotUSD/era": "dotUSD/era" };
+const UNITS = { "DOT": "DOT", "%": "%", "USD": "USD", "USD per month": "USD/month", "hours": "hours", "dotUSD/era": "dotUSD/era", "%/yr": "%/yr", "years": "years" };
 function splitUnit(label) {
   const i = label.lastIndexOf(", ");
   const unit = i < 0 ? undefined : UNITS[label.slice(i + 2)];
@@ -375,7 +417,8 @@ function resetGovernance() {
   for (const [name, c] of Object.entries(inp.chains)) { c.pps = WESTEND_PPS[name]; c.cap = WESTEND_CAP; }
   Object.assign(inp, { issuance_per_era: BAKED.issuance_per_era, dap_staker_rewards: BAKED.dap_staker_rewards,
     dap_validator_incentive: BAKED.dap_validator_incentive, dap_operational_dotusd: 0, mint_collateral: false,
-    collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO, dap_buffer_balance: BAKED.dap_buffer_balance });
+    collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO, dap_buffer_balance: BAKED.dap_buffer_balance,
+    interest_rate: 0, horizon_years: HORIZON_YEARS });
 }
 
 function buildDap() {
@@ -422,6 +465,8 @@ function buildDap() {
   field(mint, "cr", "Collateral ratio, %", "", 100, 500, 5, () => +(inp.collateral_ratio * 100).toFixed(1), (v) => inp.collateral_ratio = v / 100);
   field(mint, "lr", "Liquidation ratio, %", "", 100, 300, 5, () => +(inp.liquidation_ratio * 100).toFixed(1), (v) => inp.liquidation_ratio = v / 100);
   field(mint, "buffer-balance", "DAP buffer balance, DOT", "", 0, 50000000, 10000, () => Math.round(inp.dap_buffer_balance), (v) => inp.dap_buffer_balance = v);
+  field(mint, "interest", "Interest on the dotUSD debt, %/yr", "", 0, 20, 0.1, () => +(inp.interest_rate * 100).toFixed(2), (v) => inp.interest_rate = v / 100);
+  field(mint, "horizon", "Horizon, years", "", 1, 6, 1, () => inp.horizon_years, (v) => inp.horizon_years = Math.min(6, Math.max(1, Math.round(v))));
   const out = document.createElement("p");
   out.className = "note gov-out neg";
   out.id = "dap-out";
@@ -601,6 +646,7 @@ function renderCollateral(c) {
     "<tr><th></th><th>Per era</th><th>Per year</th></tr>" +
     `<tr><td>Buffer inflow</td><td>${perEra(c.inflow_year)}</td><td>${mdot(c.inflow_year)}</td></tr>` +
     `<tr><td>Collateral needed</td><td>${perEra(c.locked_year)}</td><td>${mdot(c.locked_year)}</td></tr>` +
+    `<tr><td>Interest</td><td>${perEra(c.interest_year)}</td><td>${mdot(c.interest_year)}</td></tr>` +
     `<tr class="${short ? "neg" : ""}"><td>${short ? "Shortfall" : "Left in the buffer"}</td><td>${perEra(Math.abs(c.surplus_year))}</td><td>${mdot(Math.abs(c.surplus_year))}</td></tr>`;
   document.getElementById("mint-formula").textContent =
     `Collateral needed = operational_costs × collateral ratio ÷ DOT price (${nf(inp.dap_operational_dotusd)} dotUSD × ${nf(inp.collateral_ratio * 100)}% at $${nf(inp.dot_price, 3)}).`;
@@ -618,6 +664,17 @@ function renderCollateral(c) {
     `<p>Liquidation if DOT falls below ${price(c.liquidation_price_buffer)} with the whole buffer behind the debt, or ${price(c.liquidation_price_collateral)} on collateral alone.</p>`,
     `<p class="mint-status ${status[0]}">${status[1]}</p>`,
   ].join("");
+  const cls = { green: "pos", amber: "warn", red: "neg" };
+  document.getElementById("mint-years-title").textContent =
+    `Year by year from ${BAKED.read_date}, DOT at $${nf(inp.dot_price, 3)}, interest ${nf(inp.interest_rate * 100, 1)}%`;
+  document.getElementById("t-mint-years").innerHTML =
+    "<tr><th>Year</th><th>dotUSD minted</th><th>Debt</th><th>Collateral</th><th>Interest</th><th>Buffer inflow</th><th>Free buffer</th><th>Liquidation</th><th>Status</th></tr>" +
+    c.years.map((r) => `<tr><td>${r.year}</td><td>${nf(r.minted / 1e6, 2)}M</td><td>${nf(r.debt / 1e6, 2)}M</td><td>${mdot(r.collateral)}</td>
+      <td>${mdot(r.interest)}</td><td>${mdot(r.inflow)}</td><td class="${r.free < 0 ? "neg" : ""}">${mdot(r.free)}</td>
+      <td>${price(r.liquidation_price)}</td><td class="${cls[r.status]}">${r.status}</td></tr>`).join("");
+  document.getElementById("mint-years-out").innerHTML =
+    `<p>${c.runs_out_year ? `The buffer runs out in year ${c.runs_out_year}.` : "The buffer lasts the whole horizon."}</p>` +
+    "<p class=\"note\">If nominators move to dotUSD or Valar stability pools, governance can lower staker_rewards. The freed share goes to the buffer and extends the runway.</p>";
 }
 
 function render() {

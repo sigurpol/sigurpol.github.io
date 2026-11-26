@@ -98,6 +98,35 @@ the salaries. A year has 365 days, so a year has 365 eras of 24 hours. Per year:
   that inflow. On collateral alone the liquidation price is liquidation ratio ÷ collateral ratio ×
   DOT price.
 
+Minting salaries is borrowing. The DAP may pay interest on its dotUSD debt, which is not so
+different from paying nominators. The tool takes a yearly interest rate, 0 by default:
+
+- Interest per year in DOT = outstanding dotUSD debt × rate ÷ DOT price, paid from the buffer.
+- It is subtracted from what is left in the buffer, and the break-even price becomes
+  salaries × (collateral ratio + rate) ÷ inflow.
+- With the doc's numbers, each 1% on $7.68M of debt costs about 77k DOT per year at $1.00.
+
+The year-by-year table follows the debt over a horizon of 1 to 6 years, 3 by default. Year 1 starts
+on the read date, 2026-11-26. For each year:
+
+- Debt is the salaries of all years so far. It is never repaid.
+- Collateral locked = debt × collateral ratio ÷ DOT price.
+- Interest = debt × rate ÷ DOT price.
+- Free buffer at year end = buffer balance + all inflow so far − collateral locked − all interest so far.
+- Liquidation price = liquidation ratio × debt ÷ (collateral locked + free buffer).
+- Green means that year's inflow covers that year's new collateral and interest. Amber means the free
+  buffer stays at or above 0 while savings are drawn down. Red means the free buffer is below 0, or
+  the DOT price is below that year's liquidation price.
+
+The buffer inflow follows the doc's issuance steps toward the 2.1B DOT cap. The current issuance holds
+until about 15 Mar 2028. It is then 26.28% lower (41.23M DOT per year in the doc) until about 18 Mar
+2030, and another 26.28% lower after that (30.40M DOT per year). Years that cross a step are
+pro-rated by days. The buffer share stays as set.
+
+The table assumes a constant DOT price, no debt repayment, salaries constant in dotUSD and a constant
+number of active validators. If nominators move to dotUSD or Valar stability pools, governance can
+lower `staker_rewards`. The freed share goes to the buffer and extends the runway.
+
 The buffer balance is the free balance of the DAP buffer account on Asset Hub,
 `13UVJyLkAxdQn6zM3GrLGvrFgN9jWneRX2NGvf3u92iunZq1` (`modl` + `dap/buff`). It held about 7.99M DOT on
 2026-11-26.

@@ -405,7 +405,6 @@ function buildInputs() {
   field(document.getElementById("costs"), "cost", "Metanode cost, USD per month", "", 0, 10000, 50, () => inp.metanode_cost_usd, (v) => inp.metanode_cost_usd = v);
   field(document.getElementById("price-panel"), "price", "DOT price, USD", "", 0.01, 20, 0.01, () => inp.dot_price, (v) => inp.dot_price = v);
   field(g, "own", "Self-stake share of exposure, %", "median of the last era", 0, 100, 0.01, () => +(inp.own_stake * 100).toFixed(2), (v) => inp.own_stake = v / 100);
-  field(g, "w", "Self-stake weight compared with the average validator", "1 = average. In era 2364, 10% of validators were below 0.63 and 10% above 1.37.", 0, 3, 0.01, () => inp.incentive_weight, (v) => inp.incentive_weight = v);
   field(g, "N", "Active validators", "", 20, 1000, 1, () => inp.validators, (v) => inp.validators = Math.round(v));
   field(g, "relay", "Relay points per validator per era", "", 0, 1000000, 100, () => Math.round(inp.relay_points_total / inp.validators_read), (v) => inp.relay_points_total = v * inp.validators_read);
   field(g, "eras", "Eras per month", "", 1, 31, 1, () => inp.eras_per_month, (v) => inp.eras_per_month = v);
@@ -441,7 +440,7 @@ function buildInputs() {
     parent.appendChild(b);
   };
   resetButton(g, "Reset staking live data", (d) => {
-    for (const k of ["own_stake", "incentive_weight", "validators", "relay_points_total", "eras_per_month", "era_hours"]) inp[k] = d[k];
+    for (const k of ["own_stake", "validators", "relay_points_total", "eras_per_month", "era_hours"]) inp[k] = d[k];
   });
   resetButton(box, "Reset system chains", (d) => {
     for (const [name, c] of Object.entries(inp.chains)) {

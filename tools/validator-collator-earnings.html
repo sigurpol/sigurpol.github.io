@@ -1,4 +1,4 @@
-<title>Validator Collator Earnings</title>
+<title>Validator Earnings with Collation</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@500;600&display=swap">
@@ -68,103 +68,93 @@ input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px s
 .chain.off .field, .chain.off .me { opacity: 0.45; }
 .me { display: flex; gap: 8px; align-items: flex-start; font-size: 12.5px; }
 .me input { accent-color: var(--accent); margin-top: 3px; }
+.me small { color: var(--muted); display: block; font-size: 11px; }
 .tag { font-family: var(--font-data); font-size: 11px; color: var(--muted); }
 .note { font-size: 12px; color: var(--muted); margin: 0; }
-.kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-@media (max-width: 640px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px; min-width: 0; }
-.kpi .k { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
-.kpi .v { font-family: var(--font-data); font-size: 1.25rem; font-weight: 500; font-variant-numeric: tabular-nums; }
-.kpi .s { font-size: 12px; color: var(--muted); font-family: var(--font-data); }
 .neg { color: var(--bad); } .pos { color: var(--good); }
 .callout { border-left: 3px solid var(--accent); background: var(--accent-soft); padding: 10px 12px; border-radius: 0 8px 8px 0; margin: 0; display: grid; gap: 4px; }
-.callout p, .be-reason p { margin: 0; }
-.be-reason { display: grid; gap: 4px; }
+.callout p, .opt-notes p { margin: 0; }
+.opt-notes .be-line { color: var(--fg); }
+.third-row { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; font-size: 13px; }
+.third-row label { display: inline-flex; gap: 6px; align-items: center; }
+.third-row input { accent-color: var(--accent); }
+.opt-notes { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.gov-rows { display: grid; gap: 16px; }
+.gov-chain { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.gov-out { font-family: var(--font-data); }
 .table-wrap { overflow-x: auto; scrollbar-color: var(--line) transparent; }
 table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
 th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
 th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 500; }
 td { font-family: var(--font-data); font-size: 12.5px; }
 th:first-child, td:first-child { text-align: left; font-family: var(--font-body); }
+#t-opts td:first-child, #t-main td:first-child { white-space: normal; min-width: 14ch; }
 .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .seg button { font: inherit; font-size: 12px; padding: 4px 10px; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
 .seg button[aria-pressed=true] { background: var(--accent); color: var(--surface); }
 .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
 svg text { fill: var(--muted); font-family: var(--font-data); font-size: 11px; }
-details summary { cursor: pointer; font-weight: 600; }
-details ul { margin: 8px 0 0; padding-left: 18px; color: var(--muted); }
 code { font-family: var(--font-data); font-size: 12px; }
+.footer a { color: var(--accent); }
+.btn { justify-self: start; font: inherit; font-size: 12.5px; font-weight: 500; padding: 6px 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+.btn:hover { background: var(--accent); color: var(--surface); }
+.field.fixed label, .field.fixed input { color: var(--muted); }
+.field.fixed input[type=range] { accent-color: var(--muted); opacity: 0.6; }
+.field.fixed input[type=number] { background: var(--surface); }
+.dap-pot { margin-top: -10px; }
 </style>
 
 <div class="wrap">
   <header>
-    <h1>Validator Collator Earnings</h1>
-    <p class="sub">What a Polkadot validator earns from relay validation alone, and with collating on Asset Hub, People and Bulletin via <code>pallet-validator-collators</code>. A metanode runs the whole Polkadot service layer: relay validation, system chain collation and full nodes, Bulletin storage, RPC and other services. Its cost is one input. The era payout is fixed. Collating creates no new reward. It moves reward between validators.</p>
-    <p class="note" id="readinfo"></p>
+    <h1>Validator Earnings with Collation</h1>
   </header>
 
   <div class="grid">
     <div class="rail">
-      <section class="panel" id="globals">
-        <h2>Network and costs</h2>
+      <section class="panel" id="costs">
+        <h2>Metanode cost</h2>
       </section>
-      <div id="chains" class="rail"></div>
-      <button type="button" id="reset" class="seg" style="justify-self:start;padding:6px 12px;cursor:pointer;background:var(--surface);color:var(--fg)">Reset to live defaults</button>
+      <section class="panel" id="gov">
+        <h2>Governance parameters</h2>
+        <div class="gov-chain" id="dap">
+          <div class="chain-head"><b>DAP budget allocation (<code>Dap.BudgetAllocation</code>)</b></div>
+          <p class="note">Live on Polkadot.</p>
+        </div>
+        <div id="gov-rows" class="gov-rows"></div>
+        <button type="button" id="reset-gov" class="btn">Reset governance parameters</button>
+      </section>
+      <section class="panel" id="price-panel">
+        <h2>DOT price</h2>
+      </section>
+      <section class="panel" id="globals">
+        <h2>Staking live data</h2>
+      </section>
+      <section class="panel" id="chains">
+        <h2>System chains</h2>
+      </section>
     </div>
 
     <div class="results">
-      <div class="kpis" id="kpis"></div>
-      <div class="callout" id="summary"></div>
-
       <section class="panel">
-        <h2>Per validator, per month</h2>
-        <div class="table-wrap"><table id="t-main"></table></div>
-        <p class="note">Gross is the validator's whole points share, operator plus nominators. Operator take is the commission, the self-stake cut of the staker pot and the incentive budget share. Net is the operator take minus the metanode cost.</p>
+        <h2>Validator earnings per month</h2>
+        <p class="note">Averaged over many months. A validator is picked for collation in some eras only, so single months vary.</p>
+        <div class="table-wrap"><table id="t-opts"></table></div>
+        <div class="third-row" id="third-row"><span>Third row: a validator that collates only on</span></div>
+        <div class="opt-notes" id="opt-notes"></div>
       </section>
 
       <section class="panel">
-        <h2>Break-even</h2>
-        <div class="table-wrap"><table id="t-be"></table></div>
-        <div id="be-reason" class="be-reason"></div>
-        <div id="chart"></div>
-        <p class="note" id="chart-pps"></p>
-        <p class="note">My expected monthly operator take as k grows. Dashed line is the metanode cost. Dotted line is relay-only. Hover the curve for the PPS per chain at each k.</p>
-        <p class="note">k multiplies the <code>PointsPerService</code> of every enabled chain at once. Everything else stays fixed: the era payout, relay points, caps, eligible validators and the metanode cost. More points per block add no DOT. They only move shares between validators, so the average validator always earns the relay-only amount. A higher k can only help a validator that collates more often than average, through a fixed seat or because fewer than N validators are eligible.</p>
+        <h2>Per validator, average per month</h2>
+        <div class="table-wrap"><table id="t-main"></table></div>
+        <p class="note">Gross is the validator's whole share of the reward, nominators included. Net is validator earnings minus the metanode cost.</p>
+        <p class="note" id="share"></p>
       </section>
 
       <section class="panel">
         <h2>Per chain</h2>
         <div class="table-wrap"><table id="t-chains"></table></div>
-        <p class="note">Gain is my expected extra operator take from that chain over a non-collator.</p>
       </section>
 
-      <section class="panel">
-        <details>
-          <summary>Formulas and assumptions</summary>
-          <ul>
-            <li>Drawn validators per chain <code>n = min(cap, K)</code>. K is the number of eligible validators, with keys and a node.</li>
-            <li><code>v</code> of the other collators are validators. Expected overlap with the draw <code>j = n·v / K</code>. A drawn validator that is also an invulnerable or candidate keeps one Aura slot.</li>
-            <li>Blocks per author <code>b = blocks_per_era / (n + others − j)</code>. Validator authors <code>m = n + v − j</code>. Points per author era <code>x = PPS · b</code>.</li>
-            <li>My draw probability <code>q = n / K</code>. It is 1 if I am one of the <code>v</code>.</li>
-            <li>Total points <code>P = N·R + Σ m·x</code>.</li>
-            <li>Value per point, gross <code>(pot + w·budget) / P</code>. Operator <code>(pot·(comm + (1−comm)·own) + w·budget) / P</code>. <code>w</code> is my incentive weight over the mean.</li>
-            <li>Relay-only reward <code>(pot + w·budget) / N</code>. A non-collator earns <code>R</code> points. I earn <code>R + Σ q·x</code> points. Monthly is per era × eras per month.</li>
-            <li>Break-even k solves <code>E·V·(R + k·S) / (N·R + k·C1) = M</code>, so <code>k = R·(M·N − E·V) / (E·V·S − M·C1)</code>. Here <code>S = Σ q·PPS·b</code>, <code>C1 = Σ m·PPS·b</code> and <code>M</code> is the metanode cost in DOT.</li>
-            <li>My take rises with k towards <code>E·V·S / C1</code>. If that is not above the cost, the break-even is unreachable.</li>
-            <li>The incentive budget is split by weight × points. The other validators are treated as average.</li>
-            <li>Drawn validators author every turn. Every author in the era's validator set earns points, however it got its slot. An invulnerable or candidate that is also a validator earns every era. One that is not a validator earns nothing.</li>
-            <li>One metanode per validator runs all the time. It runs the whole service layer (relay validation, collation and full nodes for the system chains, Bulletin storage, RPC and the other services). The model counts only era points from relay validation and collation against its cost.</li>
-            <li>Not on Polkadot yet: <code>ValidatorCollators</code> and <code>StakingPointsConverter</code>. Cap and PPS default to the Westend values. The metanode cost defaults to 2000 USD per month.</li>
-            <li>Relay points per validator <code>R</code> = relay points per era as read / validators scored. <code>R</code> stays fixed when N changes, and the relay total scales with N.</li>
-            <li>Relay era points have 3 sources. 20 per relay block authored (<code>staking-async</code> ah-client <code>do_note_author</code>, <code>PointsPerBlock</code>). 20 per backer of each included parachain candidate (<code>reward_points.rs</code>, <code>reward_backing</code>). 20 per dispute statement. Approvals and availability bitfields earn nothing.</li>
-            <li>Block authoring gives about 288k points per era, one block per 6 s slot. That is under 1% of the observed ~41.6M. Backing is almost all of it.</li>
-            <li>A validator backs the candidates of the core its group is assigned to. With fewer validators the groups shrink, but each validator still backs about as often. So relay points per validator stay about the same.</li>
-            <li>The observed total fits about 143 backing votes per relay block, for example ~29 candidates × 5 backers. This is an inference, not a chain read.</li>
-            <li>This assumes the number of cores and their use stay the same. If N fell far enough that groups hit their minimum size, points per validator could rise.</li>
-            <li>Sources are the Westend runtime at <code>polkadot-stable2611-rc2</code>. The Polkadot runtime is assumed to use the same values.</li>
-          </ul>
-        </details>
-      </section>
     </div>
   </div>
 </div>
@@ -175,12 +165,13 @@ const BAKED = {
   read_date: "2026-11-26",
   eras: [2360, 2361, 2362, 2363, 2364],
   dot_price: 0.67,
-  pot: 69207.95,
-  budget: 23092.79,
+  dap_era: 2365,
+  issuance_per_era: 153131.94,
+  dap_staker_rewards: 0.452,
+  dap_validator_incentive: 0.121,
   relay_points_total: 41595272,
   validators_read: 399.6,
   validators: 320,
-  commission: 0.0,
   own_stake: 0.0122,
   collation_points_read: null,
   chains: {
@@ -189,6 +180,8 @@ const BAKED = {
     "bulletin": { block_ms: 6061, others: 8 },
   },
 };
+// StakingPointsConverter::MaxPointsPerService on Asset Hub Westend.
+const MAX_PPS = 1000;
 const WESTEND_PPS = { "asset-hub": 20, "people": 10, "bulletin": 20 };
 const WESTEND_CAP = 20;
 const METANODE_COST_USD = 2000;
@@ -196,16 +189,17 @@ const METANODE_COST_USD = 2000;
 function defaultInputs(d) {
   const chains = {};
   for (const [name, c] of Object.entries(d.chains)) {
-    chains[name] = { enabled: true, cap: WESTEND_CAP, eligible: null, others: c.others,
-      validator_others: 0, me_fixed: false, block_ms: c.block_ms, pps: WESTEND_PPS[name] };
+    chains[name] = { enabled: true, cap: WESTEND_CAP, collators: null, others: c.others,
+      me_collate: true, block_ms: c.block_ms, pps: WESTEND_PPS[name] };
   }
-  return { dot_price: d.dot_price, pot: d.pot, budget: d.budget, commission: d.commission,
+  return { dot_price: d.dot_price, issuance_per_era: d.issuance_per_era,
+    dap_staker_rewards: d.dap_staker_rewards, dap_validator_incentive: d.dap_validator_incentive,
     own_stake: d.own_stake, incentive_weight: 1, validators: d.validators, relay_points_total: d.relay_points_total,
     validators_read: d.validators_read, eras_per_month: 30,
     era_hours: 24, metanode_cost_usd: METANODE_COST_USD, chains };
 }
 
-// Multiplier k on all PPS where E V (R + k S) / (N R + k C1) = M. The take is monotonic in k.
+// Multiplier k on all PointsPerService where E V (R + k S) / (N R + k C1) = M. Earnings are monotonic in k.
 function breakeven(E, V, R, N, S, C1, M) {
   const limit = C1 > 0 ? E * V * S / C1 : null;
   if (E * V / N >= M) return { k: 0.0, limit };
@@ -213,61 +207,75 @@ function breakeven(E, V, R, N, S, C1, M) {
   return { k: denom > 0 ? R * (M * N - E * V) / denom : null, limit };
 }
 
-function model(inp) {
+// validator_incentive share s where monthly earnings dotPerValue * (pot own + w I s) = cost. Linear in s.
+function shareBreakeven(inp, dotPerValue, pot, cost) {
+  const perShare = inp.incentive_weight * inp.issuance_per_era;
+  const covered = dotPerValue * (pot * inp.own_stake + perShare * inp.dap_validator_incentive) >= cost;
+  const share = dotPerValue > 0 && perShare > 0 ? (cost / dotPerValue - pot * inp.own_stake) / perShare : null;
+  return { share, covered, max: 1 - inp.dap_staker_rewards };
+}
+
+// One era with the validator's collation choice per chain. The other validators follow the chain settings.
+function world(inp, collate) {
   const N = inp.validators;
   const R = inp.relay_points_total / inp.validators_read;
   const E = inp.eras_per_month;
-  const budget = inp.incentive_weight * inp.budget;
-  const grossV = inp.pot + budget;
-  const opV = inp.pot * (inp.commission + (1 - inp.commission) * inp.own_stake) + budget;
+  const pot = inp.issuance_per_era * inp.dap_staker_rewards;
+  const budget = inp.incentive_weight * inp.issuance_per_era * inp.dap_validator_incentive;
+  const grossV = pot + budget;
+  const opV = pot * inp.own_stake + budget;
   const cost = inp.metanode_cost_usd / inp.dot_price;
 
   const chains = {};
   for (const [name, c] of Object.entries(inp.chains)) {
-    const v = Math.max(Math.min(c.validator_others, c.others), c.me_fixed ? 1 : 0);
-    if (!c.enabled || (c.cap <= 0 && v === 0)) continue;
-    const others = Math.max(c.others, v);
-    const K = Math.max(Math.min(c.eligible || N, N), v);
-    const n = Math.min(Math.max(c.cap, 0), K);
-    const overlap = n * v / K;
+    const mine = collate[name];
+    if (!c.enabled || (c.cap !== "all" && c.cap <= 0)) continue;
+    // K: metanodes collating here. It counts the validator only when it collates on this chain.
+    const K = Math.max(Math.min(c.collators || N, N) - (mine ? 0 : 1), 0);
+    const n = c.cap === "all" ? K : Math.min(c.cap, K);
     const blocks = inp.era_hours * 3600000 / c.block_ms;
-    const b = blocks / (n + others - overlap);
-    chains[name] = { K, n, v, overlap, m: n + v - overlap, blocks, b, x: c.pps * b,
-      q: c.me_fixed ? 1.0 : n / K, pps: c.pps };
+    const b = n + c.others > 0 ? blocks / (n + c.others) : 0.0;
+    const q = mine && K > 0 ? n / K : 0.0;
+    chains[name] = { K, n, blocks, b, x: c.pps * b, q, pps: c.pps };
   }
   const cs = Object.values(chains);
-  const C = cs.reduce((s, c) => s + c.m * c.x, 0);
+  const C = cs.reduce((s, c) => s + c.n * c.x, 0);
   const S = cs.reduce((s, c) => s + c.q * c.x, 0);
   const P = N * R + C;
   const grossPt = grossV / P, opPt = opV / P;
-  const perMonth = (pts) => ({ gross: E * pts * grossPt, operator: E * pts * opPt });
-
-  const baseline = { gross: E * grossV / N, operator: E * opV / N };
-  const non = perMonth(R);
-  const me = perMonth(R + S);
-  const be = { operator: breakeven(E, opV, R, N, S, C, cost), gross: breakeven(E, grossV, R, N, S, C, cost) };
-  for (const c of cs) {
-    Object.assign(c, {
-      gain_operator: E * c.q * c.x * opPt,
-      p_never_drawn: (1 - c.q) ** E,
-      pps_breakeven: Object.fromEntries(Object.entries(be).map(([basis, r]) => [basis, r.k === null ? null : r.k * c.pps])),
-    });
-  }
+  for (const c of cs) Object.assign(c, { gain_operator: E * c.q * c.x * opPt, p_never_drawn: (1 - c.q) ** E });
   return {
-    R, C, P, collation_share: C / P, baseline, non_collator: non, me,
-    loss_non_collator: { gross: baseline.gross - non.gross, operator: baseline.operator - non.operator },
-    cost,
-    net: { relay_only: baseline.operator - cost, non_collator: non.operator - cost, me: me.operator - cost },
-    network_cost_usd: N * inp.metanode_cost_usd,
-    breakeven: be,
+    R, C, P, collation_share: C / P, cost,
+    baseline: { gross: E * grossV / N, operator: E * opV / N },
+    me: { gross: E * (R + S) * grossPt, operator: E * (R + S) * opPt },
+    breakeven: breakeven(E, opV, R, N, S, C, cost),
+    share_breakeven: shareBreakeven(inp, E * (R + S) / P, pot, cost),
     chains,
+  };
+}
+
+function model(inp) {
+  const names = Object.keys(inp.chains);
+  const everywhere = world(inp, Object.fromEntries(names.map((n) => [n, true])));
+  const validateOnly = world(inp, Object.fromEntries(names.map((n) => [n, false])));
+  const selection = world(inp, Object.fromEntries(names.map((n) => [n, inp.chains[n].me_collate])));
+  const cost = selection.cost;
+  const option = (w) => ({ ...w.me, net: w.me.operator - cost, vs_validate_only: w.me.operator - validateOnly.me.operator });
+  return {
+    R: selection.R, C: selection.C, P: selection.P, collation_share: selection.collation_share,
+    cost, baseline: selection.baseline, chains: selection.chains,
+    options: { everywhere: option(everywhere), validate_only: option(validateOnly), selection: option(selection) },
+    pots: { staker: inp.issuance_per_era * inp.dap_staker_rewards, incentive: inp.issuance_per_era * inp.dap_validator_incentive },
+    network_cost_usd: inp.validators * inp.metanode_cost_usd,
+    breakeven: everywhere.breakeven,
+    share_breakeven: everywhere.share_breakeven,
   };
 }
 if (typeof module !== "undefined") module.exports = { BAKED, defaultInputs, model };
 </script>
 
 <script>
-const LABELS = { "asset-hub": "Asset Hub · 1000", "people": "People · 1004", "bulletin": "Bulletin · 1010" };
+const LABELS = { "asset-hub": "Asset Hub", "people": "People", "bulletin": "Bulletin" };
 const SHORT = { "asset-hub": "Asset Hub", "people": "People", "bulletin": "Bulletin" };
 const COLORS = { "asset-hub": "var(--c1)", "people": "var(--c2)", "bulletin": "var(--c3)" };
 let inp = defaultInputs(BAKED);
@@ -275,14 +283,7 @@ let inp = defaultInputs(BAKED);
 const nf = (v, d = 0) => v.toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 const usd = (dot) => "$" + nf(dot * inp.dot_price);
 const signedUsd = (dot) => `<span class="${dot < 0 ? "neg" : "pos"}">${dot < 0 ? "−" : "+"}$${nf(Math.abs(dot) * inp.dot_price)}</span>`;
-const ppsStr = (v) => v === null ? "unreachable" : nf(v, 1);
 
-document.getElementById("readinfo").textContent =
-  `Defaults read ${BAKED.read_date} from Polkadot Asset Hub eras ${BAKED.eras[0]}–${BAKED.eras.at(-1)}. ` +
-  (Math.round(BAKED.validators_read) === BAKED.validators
-    ? `${BAKED.validators} validators were active.`
-    : `${Math.round(BAKED.validators_read)} validators were active then. The latest election set ${BAKED.validators}. ` +
-      `Relay points per validator are taken from those eras and assumed unchanged.`);
 
 const syncers = [];
 function field(parent, id, label, hint, min, max, step, get, set) {
@@ -300,18 +301,112 @@ function field(parent, id, label, hint, min, max, step, get, set) {
   num.addEventListener("change", () => { num.value = get(); });
   rng.addEventListener("input", () => apply(parseFloat(rng.value)));
   syncers.push(sync);
+  return el;
+}
+
+function checkbox(parent, id, text, hint, get, set) {
+  const el = document.createElement("label");
+  el.className = "me";
+  el.innerHTML = `<input type="checkbox" id="${id}"><span>${text}<small>${hint}</small></span>`;
+  parent.appendChild(el);
+  const box = el.querySelector("input");
+  box.addEventListener("change", () => { set(box.checked); render(); });
+  syncers.push(() => box.checked = get());
+}
+
+function resetGovernance() {
+  for (const [name, c] of Object.entries(inp.chains)) { c.pps = WESTEND_PPS[name]; c.cap = WESTEND_CAP; }
+  Object.assign(inp, { issuance_per_era: BAKED.issuance_per_era, dap_staker_rewards: BAKED.dap_staker_rewards,
+    dap_validator_incentive: BAKED.dap_validator_incentive });
+}
+
+function buildDap() {
+  const box = document.getElementById("dap");
+  box.querySelector(".note").textContent = `Live on Polkadot. Defaults are the current values, read with era ${BAKED.dap_era}.`;
+  field(box, "issuance", "Issuance per era, DOT", "Minted by pallet-dap and split between the budget recipients.", 0, 500000, 100,
+    () => Math.round(inp.issuance_per_era), (v) => inp.issuance_per_era = v);
+  const note = (id) => {
+    const p = document.createElement("p");
+    p.className = "note dap-pot";
+    p.id = id;
+    box.appendChild(p);
+  };
+  field(box, "dap-staker", "staker_rewards, %", "", 0, 100, 0.1,
+    () => +(inp.dap_staker_rewards * 100).toFixed(2), (v) => inp.dap_staker_rewards = v / 100);
+  note("dap-staker-out");
+  field(box, "dap-incentive", "validator_incentive, %", "", 0, 100, 0.1,
+    () => +(inp.dap_validator_incentive * 100).toFixed(2), (v) => inp.dap_validator_incentive = v / 100);
+  note("dap-incentive-out");
+  const buf = document.createElement("div");
+  buf.className = "field fixed";
+  buf.innerHTML = `<label for="dap-buffer">DAP buffer, %</label>
+    <input type="number" id="dap-buffer" disabled>
+    <input type="range" id="dap-buffer-r" min="0" max="100" step="0.1" disabled aria-label="DAP buffer, %">`;
+  box.appendChild(buf);
+  note("dap-buffer-out");
+  const out = document.createElement("p");
+  out.className = "note gov-out neg";
+  out.id = "dap-out";
+  box.appendChild(out);
+}
+
+function buildGovernance() {
+  buildDap();
+  const rows = document.getElementById("gov-rows");
+  for (const name of Object.keys(inp.chains)) {
+    const c = () => inp.chains[name];
+    const row = document.createElement("div");
+    row.className = "gov-chain";
+    row.innerHTML = `<div class="chain-head"><b><span class="swatch" style="background:${COLORS[name]}"></span> ${LABELS[name]}</b></div>`;
+    rows.appendChild(row);
+    field(row, `pps-${name}`, "StakingPointsConverter.PointsPerService (para, Collation)",
+      "era points per block a validator authors on this chain",
+      0, MAX_PPS, 1, () => c().pps, (v) => c().pps = Math.round(v));
+    let lastN = WESTEND_CAP;
+    const mode = document.createElement("div");
+    mode.className = "field wide";
+    mode.innerHTML = `<label for="capmode-${name}">ValidatorCollators.MaxCollators<small>validators drawn per era</small></label>
+      <select id="capmode-${name}"><option value="none">None</option><option value="upto">UpTo(n)</option><option value="all">All</option></select>`;
+    row.appendChild(mode);
+    const sel = mode.querySelector("select");
+    sel.addEventListener("change", () => { c().cap = sel.value === "all" ? "all" : sel.value === "none" ? 0 : lastN; render(); });
+    const nField = field(row, `cap-${name}`, "n in UpTo(n)", "", 1, 400, 1,
+      () => typeof c().cap === "number" && c().cap > 0 ? c().cap : lastN,
+      (v) => { lastN = Math.max(1, Math.round(v)); c().cap = lastN; });
+    syncers.push(() => {
+      const cap = c().cap;
+      sel.value = cap === "all" ? "all" : cap > 0 ? "upto" : "none";
+      nField.hidden = sel.value !== "upto";
+    });
+    const out = document.createElement("p");
+    out.className = "note gov-out";
+    out.id = `gov-out-${name}`;
+    row.appendChild(out);
+  }
+  document.getElementById("reset-gov").addEventListener("click", () => { resetGovernance(); render(); });
+}
+
+function buildThirdRow() {
+  const box = document.getElementById("third-row");
+  for (const name of Object.keys(inp.chains)) {
+    const el = document.createElement("label");
+    el.innerHTML = `<input type="checkbox" id="sel-${name}"> ${SHORT[name]}`;
+    box.appendChild(el);
+    const cb = el.querySelector("input");
+    cb.addEventListener("change", () => { inp.chains[name].me_collate = cb.checked; render(); });
+    syncers.push(() => { cb.checked = inp.chains[name].me_collate; cb.disabled = !inp.chains[name].enabled; });
+  }
 }
 
 function buildInputs() {
+  buildGovernance();
+  buildThirdRow();
   const g = document.getElementById("globals");
-  field(g, "cost", "Metanode cost, USD per month", "the whole service layer", 0, 10000, 50, () => inp.metanode_cost_usd, (v) => inp.metanode_cost_usd = v);
-  field(g, "price", "DOT price, USD", "", 0.01, 20, 0.01, () => inp.dot_price, (v) => inp.dot_price = v);
-  field(g, "pot", "Staker pot per era, DOT", "ErasValidatorReward", 0, 300000, 100, () => inp.pot, (v) => inp.pot = v);
-  field(g, "budget", "Incentive budget per era, DOT", "ErasValidatorIncentiveBudget", 0, 100000, 100, () => inp.budget, (v) => inp.budget = v);
-  field(g, "comm", "Commission, %", "MaxCommission is 0", 0, 100, 0.5, () => +(inp.commission * 100).toFixed(2), (v) => inp.commission = v / 100);
+  field(document.getElementById("costs"), "cost", "Metanode cost, USD per month", "", 0, 10000, 50, () => inp.metanode_cost_usd, (v) => inp.metanode_cost_usd = v);
+  field(document.getElementById("price-panel"), "price", "DOT price, USD", "", 0.01, 20, 0.01, () => inp.dot_price, (v) => inp.dot_price = v);
   field(g, "own", "Self-stake share of exposure, %", "median of the last era", 0, 100, 0.01, () => +(inp.own_stake * 100).toFixed(2), (v) => inp.own_stake = v / 100);
-  field(g, "w", "Relative incentive weight", "own / mean weight. Era 2364 p10 0.63, p90 1.37", 0, 3, 0.01, () => inp.incentive_weight, (v) => inp.incentive_weight = v);
-  field(g, "N", "Active validators N", "", 20, 1000, 1, () => inp.validators, (v) => inp.validators = Math.round(v));
+  field(g, "w", "Self-stake weight compared with the average validator", "1 = average. In era 2364, 10% of validators were below 0.63 and 10% above 1.37.", 0, 3, 0.01, () => inp.incentive_weight, (v) => inp.incentive_weight = v);
+  field(g, "N", "Active validators", "", 20, 1000, 1, () => inp.validators, (v) => inp.validators = Math.round(v));
   field(g, "relay", "Relay points per era, total as read", "per validator = total / validators scored", 0, 100000000, 10000, () => inp.relay_points_total, (v) => inp.relay_points_total = v);
   field(g, "eras", "Eras per month", "", 1, 31, 1, () => inp.eras_per_month, (v) => inp.eras_per_month = v);
   field(g, "hours", "Era length, hours", "", 1, 48, 1, () => inp.era_hours, (v) => inp.era_hours = v);
@@ -320,7 +415,7 @@ function buildInputs() {
   for (const name of Object.keys(inp.chains)) {
     const c = () => inp.chains[name];
     const p = document.createElement("section");
-    p.className = "panel chain";
+    p.className = "gov-chain chain";
     p.innerHTML = `<div class="chain-head"><label><input type="checkbox" id="en-${name}">
       <span class="swatch" style="background:${COLORS[name]}"></span>${LABELS[name]}</label>
       <span class="tag" id="tag-${name}"></span></div>`;
@@ -328,133 +423,120 @@ function buildInputs() {
     const cb = p.querySelector("input");
     cb.addEventListener("change", () => { c().enabled = cb.checked; render(); });
     syncers.push(() => { cb.checked = c().enabled; p.classList.toggle("off", !c().enabled); });
-    field(p, `cap-${name}`, "Cap n (MaxCollators)", "Westend value. 0 = None", 0, 400, 1, () => c().cap, (v) => c().cap = Math.round(v));
-    field(p, `k-${name}`, "Eligible validators K", "with keys and a node. 0 = all N", 0, 1000, 1, () => c().eligible || 0, (v) => c().eligible = Math.round(v) || null);
-    field(p, `o-${name}`, "Other collators", "invulnerables + candidates", 0, 50, 1, () => c().others, (v) => c().others = Math.round(v));
-    field(p, `vo-${name}`, "Of them, validators", "earn every era. At most the other collators", 0, 50, 1, () => c().validator_others, (v) => c().validator_others = Math.round(v));
-    const me = document.createElement("label");
-    me.className = "me";
-    me.innerHTML = `<input type="checkbox" id="me-${name}"> I am one of these validator invulnerables or candidates (earn every era, no draw)`;
-    p.appendChild(me);
-    const meBox = me.querySelector("input");
-    meBox.addEventListener("change", () => { c().me_fixed = meBox.checked; render(); });
-    syncers.push(() => meBox.checked = c().me_fixed);
-    field(p, `bt-${name}`, "Block time, ms", "measured", 500, 12000, 1, () => c().block_ms, (v) => c().block_ms = v);
-    field(p, `pps-${name}`, "PointsPerService", "Westend value", 0, 1000, 1, () => c().pps, (v) => c().pps = v);
+    field(p, `k-${name}`, "Metanodes collating on this chain", "Metanodes with session keys and a running collator for this chain. Each era the draw picks MaxCollators of them.", 0, BAKED.validators, 1,
+      () => Math.min(c().collators || inp.validators, inp.validators), (v) => c().collators = Math.round(v) >= inp.validators ? null : Math.round(v));
+    // The slider spans 0 to the number of active validators, which can change.
+    syncers.unshift(() => {
+      document.getElementById(`k-${name}-r`).max = inp.validators;
+      document.getElementById(`k-${name}`).max = inp.validators;
+    });
+    field(p, `o-${name}`, "Invulnerables and candidates", "Collators chosen by the chain itself. They share the blocks and earn no points.", 0, 50, 1, () => c().others, (v) => c().others = Math.round(v));
+    field(p, `bt-${name}`, "Block time, ms", "Average time between blocks on this chain, measured.", 500, 12000, 1, () => c().block_ms, (v) => c().block_ms = v);
   }
-  document.getElementById("reset").addEventListener("click", () => { inp = defaultInputs(BAKED); render(); });
+  const resetButton = (parent, label, reset) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "btn";
+    b.textContent = label;
+    b.addEventListener("click", () => { reset(defaultInputs(BAKED)); render(); });
+    parent.appendChild(b);
+  };
+  resetButton(g, "Reset staking live data", (d) => {
+    for (const k of ["own_stake", "incentive_weight", "validators", "relay_points_total", "eras_per_month", "era_hours"]) inp[k] = d[k];
+  });
+  resetButton(box, "Reset system chains", (d) => {
+    for (const [name, c] of Object.entries(inp.chains)) {
+      for (const k of ["enabled", "collators", "others", "block_ms"]) c[k] = d.chains[name][k];
+    }
+  });
 }
 
-function summaryLines(out) {
-  const lines = [`Averaged over all ${inp.validators} validators, the reward is the same as with no collation.`,
-    `Running a metanode on every validator costs the set $${nf(out.network_cost_usd)} per month.`];
-  const plain = Object.entries(out.chains).every(([name, c]) => c.K === inp.validators && c.v === 0 && !inp.chains[name].me_fixed);
-  const diff = out.me.operator - out.baseline.operator;
-  if (plain || Math.abs(diff) * inp.dot_price < 0.5) {
-    lines.push(plain
-      ? "Every validator is in the draw on every enabled chain, so each one collates as often as the average. Its expected reward is the same as relay-only."
-      : "I collate as often as the average validator. My expected reward is the same as relay-only.");
-  } else if (diff > 0) {
-    lines.push(`I collate more often than the average validator. That is worth ${usd(diff)} per month over relay-only.`);
-  } else {
-    lines.push(`I collate less often than the average validator. That costs me ${usd(-diff)} per month against relay-only.`);
+const OPTIONS = [["everywhere", "Validates and collates on every chain"], ["validate_only", "Validates only"], ["selection", "Validates and collates on the chains ticked below"]];
+
+function drawHint(out) {
+  const E = inp.eras_per_month;
+  const counts = Object.entries(out.chains).filter(([, c]) => c.q > 0)
+    .map(([n, c]) => [n, c.q >= 1 ? "every era" : Math.round(c.q * E)]);
+  if (counts.length === 0) return "";
+  const vals = new Set(counts.map(([, v]) => v));
+  if (vals.size === 1 && !vals.has("every era")) {
+    return `On the ticked chains a validator collates in about ${counts[0][1]} of ${E} eras per month on each chain, at the current caps.`;
   }
-  lines.push(`A validator that doesn't collate loses ${usd(out.loss_non_collator.operator)} per month to those that do.`);
-  return lines;
+  const parts = counts.map(([n, v]) => v === "every era" ? `every era on ${SHORT[n]}` : `${v} of ${E} eras on ${SHORT[n]}`);
+  const listed = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(", ") + " and " + parts.at(-1);
+  return `On the ticked chains a validator collates in about ${listed} per month.`;
 }
 
-function breakevenReason(out, basis) {
-  const r = out.breakeven[basis], base = out.baseline[basis];
-  if (r.k === 0) return "Relay-only already covers the metanode cost. No collation is needed.";
-  if (r.k !== null) return `At k = ${nf(r.k, 2)} my expected take equals the metanode cost.`;
-  if (r.limit === null) return "Unreachable. No chain is enabled.";
-  const reach = `Unreachable. Even if collation took all era points, my take would only approach ${usd(r.limit)}`;
-  return r.limit <= base * (1 + 1e-12)
-    ? `${reach}. I collate no more often than the average validator, so more points per block cannot lift my take above relay-only (${usd(base)}).`
-    : `${reach}, below the metanode cost.`;
+// Every validator in the draw on every chain: all active validators collate on every chain.
+function everyoneInDraw(out) {
+  return Object.keys(out.chains).every((n) => {
+    const c = inp.chains[n];
+    return (c.collators || inp.validators) >= inp.validators;
+  });
+}
+
+// Plain lines on what covers the metanode cost for a validator that collates on every chain.
+function breakevenLines(out) {
+  const sb = out.share_breakeven, cost = `$${nf(inp.metanode_cost_usd)}`, pct = (v) => `${nf(v * 100, 1)}%`;
+  if (sb.covered) return [`A validator that collates on every chain already covers the ${cost} metanode cost.`];
+  const first = sb.share !== null && sb.share <= sb.max
+    ? `Covering the ${cost} metanode cost needs validator_incentive at about ${pct(sb.share)} (today ${pct(inp.dap_validator_incentive)}).`
+    : sb.share !== null
+      ? `validator_incentive alone can't cover the ${cost} metanode cost. It would need about ${pct(sb.share)}, but only ${pct(sb.max)} is left beside staker_rewards.`
+      : `validator_incentive alone can't cover the ${cost} metanode cost.`;
+  if (everyoneInDraw(out)) return [first + " Higher points per block don't help while every validator is in the draw."];
+  const k = out.breakeven.k, names = Object.keys(out.chains);
+  if (k === null) return [first, "Higher points per block can't cover it either."];
+  if (k === 0) return [first];
+  const over = names.some((n) => k * out.chains[n].pps > MAX_PPS) ? ` That is above the runtime limit of ${nf(MAX_PPS)} (MaxPointsPerService).` : "";
+  return [first, `Or points per block of ${names.map((n) => nf(k * out.chains[n].pps, 1)).join(" / ")} on ${names.map((n) => SHORT[n]).join(" / ")}, about ${nf(k, 2)} times today's values.${over}`];
 }
 
 function render() {
   syncers.forEach((s) => s());
   const out = model(inp);
+  const rest = 1 - inp.dap_staker_rewards - inp.dap_validator_incentive;
+  const dapOut = document.getElementById("dap-out");
+  dapOut.hidden = rest >= -1e-9;
+  dapOut.textContent = `staker_rewards and validator_incentive add up to ${nf((1 - rest) * 100, 1)}%, more than 100%. Lower one of them.`;
+  const restPct = Math.max(rest, 0) * 100;
+  document.getElementById("dap-buffer").value = restPct.toFixed(1);
+  document.getElementById("dap-buffer-r").value = restPct;
+  document.getElementById("dap-staker-out").textContent = `Staker pot ${nf(out.pots.staker)} DOT per era`;
+  document.getElementById("dap-incentive-out").textContent = `Incentive budget ${nf(out.pots.incentive)} DOT per era`;
+  document.getElementById("dap-buffer-out").textContent = `DAP buffer ${nf(Math.max(rest, 0) * inp.issuance_per_era)} DOT per era`;
   for (const name of Object.keys(inp.chains)) {
-    const c = out.chains[name];
-    document.getElementById(`tag-${name}`).textContent = !c ? "off"
-      : inp.chains[name].me_fixed ? "me: every era" : `drawn ${c.n} of ${c.K}`;
+    const c = out.chains[name], ch = inp.chains[name];
+    document.getElementById(`tag-${name}`).textContent = !c ? "off" : `${c.n} of ${c.K} drawn`;
+    document.getElementById(`gov-out-${name}`).textContent = !c
+      ? "No validator collates here at these settings."
+      : `${nf(c.x)} points per author per era.`;
   }
-  const be = out.breakeven.operator;
 
-  const kpi = (k, v, s) => `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
-  document.getElementById("kpis").innerHTML =
-    kpi("My net / month", signedUsd(out.net.me), `take ${usd(out.me.operator)} − cost $${nf(inp.metanode_cost_usd)}`) +
-    kpi("Relay-only net / month", signedUsd(out.net.relay_only), `take ${usd(out.baseline.operator)}`) +
-    kpi("Break-even k", be.k === null ? "unreachable" : nf(be.k, 2), "× PointsPerService, operator take") +
-    kpi("Collation share", nf(out.collation_share * 100, 1) + "%", `${nf(out.C)} of ${nf(out.P)} pts`);
+  const signedDiff = (dot) => Math.abs(dot * inp.dot_price) < 0.5 ? "$0" : signedUsd(dot);
+  document.getElementById("t-opts").innerHTML =
+    "<tr><th>Option</th><th>DOT</th><th>USD</th><th>Net after metanode</th><th>vs validates only</th></tr>" +
+    OPTIONS.map(([key, label]) => {
+      const o = out.options[key];
+      return `<tr><td>${label}</td><td>${nf(o.operator)}</td><td>${usd(o.operator)}</td><td>${signedUsd(o.net)}</td><td>${key === "validate_only" ? "" : signedDiff(o.vs_validate_only)}</td></tr>`;
+    }).join("");
+  const hint = drawHint(out);
+  document.getElementById("opt-notes").innerHTML =
+    "<p>A validator that only validates earns less, because the collation points of the others dilute the fixed payout.</p>" +
+    breakevenLines(out).map((l) => `<p class="be-line">${l}</p>`).join("") +
+    (hint ? `<p>${hint}</p>` : "");
 
-  document.getElementById("summary").innerHTML = Object.keys(out.chains).length === 0
-    ? "<p>No chain is enabled. Every validator earns the relay-only share.</p>"
-    : summaryLines(out).map((l) => `<p>${l}</p>`).join("");
-
-  const rows = [["Relay only, no collation", out.baseline, out.net.relay_only], ["Non-collator", out.non_collator, out.net.non_collator],
-    ["Me, expected over draws", out.me, out.net.me], ["Loss of a non-collator", out.loss_non_collator, null]];
+  const rows = [["Reference: no validator collates", out.baseline, null], ...OPTIONS.map(([key, label]) => [label, out.options[key], out.options[key].net])];
   document.getElementById("t-main").innerHTML =
-    "<tr><th></th><th>Gross DOT</th><th>Gross USD</th><th>Operator DOT</th><th>Operator USD</th><th>Net USD</th></tr>" +
+    "<tr><th></th><th>Gross DOT</th><th>Gross USD</th><th>Earnings DOT</th><th>Earnings USD</th><th>Net USD</th></tr>" +
     rows.map(([l, v, net]) => `<tr><td>${l}</td><td>${nf(v.gross)}</td><td>${usd(v.gross)}</td><td>${nf(v.operator)}</td><td>${usd(v.operator)}</td><td>${net === null ? "" : signedUsd(net)}</td></tr>`).join("");
-
-  const names = Object.keys(out.chains);
-  document.getElementById("t-be").innerHTML =
-    `<tr><th>Basis</th><th>k</th>${names.map((n) => `<th>${SHORT[n]} PPS</th>`).join("")}</tr>` +
-    `<tr><td>PPS now</td><td>1.00</td>${names.map((n) => `<td>${out.chains[n].pps}</td>`).join("")}</tr>` +
-    ["operator", "gross"].map((basis) => `<tr><td>${basis === "operator" ? "Operator take" : "Gross (with nominators)"}</td>
-      <td>${out.breakeven[basis].k === null ? "unreachable" : nf(out.breakeven[basis].k, 2)}</td>
-      ${names.map((n) => `<td>${out.breakeven[basis].k === 0 ? "not needed" : ppsStr(out.chains[n].pps_breakeven[basis])}</td>`).join("")}</tr>`).join("");
-  document.getElementById("be-reason").innerHTML =
-    `<p><b>Operator take.</b> ${breakevenReason(out, "operator")}</p><p><b>Gross.</b> ${breakevenReason(out, "gross")}</p>`;
+  document.getElementById("share").textContent = `Collation makes up ${nf(out.collation_share * 100, 1)}% of all era points. Relay validation makes up the rest.`;
 
   document.getElementById("t-chains").innerHTML =
-    "<tr><th>Chain</th><th>Me</th><th>n / K</th><th>Validator others</th><th>q</th><th>Blocks / era</th><th>Pts / author era</th><th>P(never in month)</th><th>Gain / mo</th><th>PPS now</th></tr>" +
+    "<tr><th>Chain</th><th>Drawn / collating metanodes</th><th>% picked per era</th><th>Blocks / era</th><th>Points per author per era</th><th>% months with no pick</th><th>Earned by collating per month (avg)</th><th>Points per block</th></tr>" +
     Object.entries(out.chains).map(([name, c]) => `<tr><td><span class="swatch" style="background:${COLORS[name]}"></span> ${SHORT[name]}</td>
-      <td>${inp.chains[name].me_fixed ? "fixed seat" : "draw"}</td><td>${c.n} / ${c.K}</td><td>${c.v}</td><td>${nf(c.q, 3)}</td><td>${nf(c.blocks)}</td>
-      <td>${nf(c.x)}</td><td>${nf(c.p_never_drawn, 3)}</td><td>${usd(c.gain_operator)}</td><td>${c.pps}</td></tr>`).join("");
-
-  drawChart(out);
-}
-
-function drawChart(out) {
-  const el = document.getElementById("chart");
-  if (Object.keys(out.chains).length === 0) { el.innerHTML = ""; document.getElementById("chart-pps").textContent = ""; return; }
-  const k = out.breakeven.operator.k;
-  const kMax = Math.min(50, Math.max(4, k ? Math.ceil(k * 2) : 4));
-  const take = (kk) => {
-    const trial = structuredClone(inp);
-    for (const c of Object.values(trial.chains)) c.pps *= kk;
-    return model(trial).me.operator * inp.dot_price;
-  };
-  const pts = Array.from({ length: 61 }, (_, i) => [kMax * i / 60, take(kMax * i / 60)]);
-  const ppsAt = (kk) => Object.entries(out.chains).map(([n, c]) => `${SHORT[n]} ${nf(c.pps * kk, 1)}`).join(", ");
-  document.getElementById("chart-pps").textContent = `PPS per chain is k × today's value. At k = 1: ${ppsAt(1)}. At k = ${nf(kMax)}: ${ppsAt(kMax)}.` +
-    (k !== null && k > 0 ? ` At break-even k = ${nf(k, 2)}: ${ppsAt(k)}.` : "");
-  const cost = inp.metanode_cost_usd, base = out.baseline.operator * inp.dot_price;
-  // Scale from the take, not the cost, so moving the cost moves its line.
-  const yMax = Math.max(base * 2.5, cost * 1.15, ...pts.map((p) => p[1] * 1.15)) || 1;
-  const W = 640, H = 240, L = 60, Rm = 12, T = 12, B = 32;
-  const sx = (v) => L + (W - L - Rm) * v / kMax, sy = (v) => H - B - (H - T - B) * v / yMax;
-  const ticks = (max, n) => Array.from({ length: n + 1 }, (_, i) => max * i / n);
-  const path = pts.map((p, i) => `${i ? "L" : "M"}${sx(p[0]).toFixed(1)},${sy(p[1]).toFixed(1)}`).join("");
-  el.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="My monthly operator take versus PointsPerService multiplier k">
-    ${ticks(yMax, 4).map((v) => `<line x1="${L}" x2="${W - Rm}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${sy(v) + 4}" text-anchor="end">$${nf(v)}</text>`).join("")}
-    ${ticks(kMax, 4).map((v) => `<text x="${sx(v)}" y="${H - B + 16}" text-anchor="middle">${nf(v, kMax < 8 ? 1 : 0)}</text>`).join("")}
-    <text x="${W - Rm}" y="${H - 4}" text-anchor="end">k × PointsPerService</text>
-    <path d="${path} L${sx(kMax)},${sy(0)} L${sx(0)},${sy(0)} Z" fill="var(--accent)" fill-opacity="0.08"/>
-    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2"/>
-    <line x1="${L}" x2="${W - Rm}" y1="${sy(cost)}" y2="${sy(cost)}" stroke="var(--fg)" stroke-dasharray="5 4"/>
-    <text x="${W - Rm}" y="${sy(cost) - 6}" text-anchor="end">metanode $${nf(cost)}</text>
-    <line x1="${L}" x2="${W - Rm}" y1="${sy(base)}" y2="${sy(base)}" stroke="var(--muted)" stroke-dasharray="2 3"/>
-    <text x="${L + 6}" y="${sy(base) + 14}">relay-only $${nf(base)}</text>
-    <circle cx="${sx(1)}" cy="${sy(take(1))}" r="4" fill="var(--accent)"/>
-    ${pts.map(([kk, v]) => `<circle cx="${sx(kk)}" cy="${sy(v)}" r="6" fill="transparent"><title>k = ${nf(kk, 2)}. ${ppsAt(kk)}. Take $${nf(v)}</title></circle>`).join("")}
-    ${k !== null && k > 0 && k <= kMax ? `<line x1="${sx(k)}" x2="${sx(k)}" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-dasharray="2 3"/><text x="${sx(k) + 4}" y="${T + 10}">k = ${nf(k, 2)}</text>` : ""}
-  </svg>`;
+      <td>${c.n} / ${c.K}</td><td>${nf(c.q * 100, 1)}%</td><td>${nf(c.blocks)}</td>
+      <td>${nf(c.x)}</td><td>${c.q > 0 ? nf(c.p_never_drawn * 100, 1) + "%" : "–"}</td><td>${usd(c.gain_operator)}</td><td>${c.pps}</td></tr>`).join("");
 }
 
 buildInputs();

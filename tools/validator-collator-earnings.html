@@ -359,7 +359,7 @@ function buildGovernance() {
     row.className = "gov-chain";
     row.innerHTML = `<div class="chain-head"><b><span class="swatch" style="background:${COLORS[name]}"></span> ${LABELS[name]}</b></div>`;
     rows.appendChild(row);
-    field(row, `pps-${name}`, "StakingPointsConverter.PointsPerService (para, Collation)",
+    field(row, `pps-${name}`, "StakingPointsConverter.PointsPerService",
       "era points per block a validator authors on this chain",
       0, MAX_PPS, 1, () => c().pps, (v) => c().pps = Math.round(v));
     let lastN = WESTEND_CAP;

@@ -147,7 +147,7 @@ code { font-family: var(--font-data); font-size: 12px; }
       <section class="panel">
         <h2>Per validator, average per month</h2>
         <div class="table-wrap"><table id="t-main"></table></div>
-        <p class="note">Gross is the validator's whole share of the reward, nominators included. Net is validator earnings minus the metanode cost.</p>
+        <p class="note" id="split"></p>
         <p class="note" id="share"></p>
       </section>
 
@@ -534,6 +534,18 @@ function render() {
   const restPct = Math.max(rest, 0) * 100;
   document.getElementById("dap-buffer").value = restPct.toFixed(1);
   document.getElementById("dap-buffer-r").value = restPct;
+  {
+    // Split of the gross reward of a validator that collates on every chain.
+    const pot = out.pots.staker, budget = inp.incentive_weight * out.pots.incentive;
+    const gross = out.options.everywhere.gross;
+    const fromStakers = gross * pot / (pot + budget), fromIncentive = gross - fromStakers;
+    const own = inp.own_stake;
+    document.getElementById("split").textContent =
+      `Gross is the whole reward of a validator, nominators included. For a validator that collates on every chain, ` +
+      `staker_rewards pay ${usd(fromStakers)} per month: ${usd(fromStakers * (1 - own))} (${nf((1 - own) * 100, 1)}%) to its nominators ` +
+      `and ${usd(fromStakers * own)} (${nf(own * 100, 1)}%) to the validator. validator_incentive pays ${usd(fromIncentive)}, all to the validator. ` +
+      `Net is validator earnings minus the metanode cost.`;
+  }
   document.getElementById("dap-staker-out").textContent = `Staker pot ${nf(out.pots.staker)} DOT per era`;
   document.getElementById("dap-incentive-out").textContent = `Incentive budget ${nf(out.pots.incentive)} DOT per era`;
   document.getElementById("dap-buffer-out").textContent = `DAP buffer ${nf(Math.max(rest, 0) * inp.issuance_per_era)} DOT per era`;

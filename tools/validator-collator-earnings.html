@@ -157,9 +157,6 @@ code { font-family: var(--font-data); font-size: 12px; }
         <div class="table-wrap"><table id="t-mint"></table></div>
         <p class="note" id="mint-formula"></p>
         <div class="mint-out" id="mint-out"></div>
-        <h3 class="mint-h3" id="mint-years-title"></h3>
-        <div class="table-wrap"><table id="t-mint-years"></table></div>
-        <div class="mint-out" id="mint-years-out"></div>
       </section>
 
       <section class="panel">
@@ -172,6 +169,13 @@ code { font-family: var(--font-data); font-size: 12px; }
       <section class="panel">
         <h2>Per chain</h2>
         <div class="table-wrap"><table id="t-chains"></table></div>
+      </section>
+
+      <section class="panel" id="mint-years-panel" hidden>
+        <h2>DAP buffer and dotUSD debt, year by year</h2>
+        <div class="table-wrap"><table id="t-mint-years"></table></div>
+        <p class="note" id="mint-years-title"></p>
+        <div class="mint-out" id="mint-years-out"></div>
       </section>
 
     </div>
@@ -667,7 +671,7 @@ function renderCollateral(c) {
   ].join("");
   const cls = { green: "pos", amber: "warn", red: "neg" };
   document.getElementById("mint-years-title").textContent =
-    `Year by year from ${BAKED.read_date}, DOT at $${nf(inp.dot_price, 3)}, interest ${nf(inp.interest_rate * 100, 1)}%`;
+    `From ${BAKED.read_date}, DOT at $${nf(inp.dot_price, 3)}, interest ${nf(inp.interest_rate * 100, 1)}%.`;
   document.getElementById("t-mint-years").innerHTML =
     "<tr><th>Year</th><th>dotUSD minted</th><th>Debt</th><th>Collateral</th><th>Interest</th><th>Buffer inflow</th><th>Free buffer</th><th>Liquidation</th><th>Status</th></tr>" +
     c.years.map((r) => `<tr><td>${r.year}</td><td>${nf(r.minted / 1e6, 2)}M</td><td>${nf(r.debt / 1e6, 2)}M</td><td>${mdot(r.collateral)}</td>
@@ -692,6 +696,7 @@ function render() {
   document.getElementById("ops-per-validator-r").value = out.pots.operational_per_validator;
   document.getElementById("mint-box").hidden = !inp.mint_collateral;
   document.getElementById("mint-panel").hidden = !inp.mint_collateral;
+  document.getElementById("mint-years-panel").hidden = !inp.mint_collateral;
   if (inp.mint_collateral) renderCollateral(out.collateral);
   {
     // Split of the gross reward of a validator that collates on every chain.

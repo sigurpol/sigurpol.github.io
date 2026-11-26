@@ -135,7 +135,8 @@ a.addr:hover { text-decoration: underline; }
 </div>
 
 <script type="module">
-import { Monitor, NETWORKS, overall, fmtAge, toSs58 } from "./validator-collators-monitor.js";
+// Bump the version whenever the JS changes, so browsers don't pair new HTML with a cached old JS.
+import { Monitor, NETWORKS, overall, fmtAge, toSs58 } from "./validator-collators-monitor.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -211,6 +212,7 @@ function eraEventText(e) {
 
 function sessionRow(l) {
   const sp = l.sessionSplit;
+  if (!sp) return ["Session.Validators", num(l.sessionCount), ""];
   const groups = [
     ["drawn validators", sp.drawn, true],
     ["invulnerables", sp.invulnerables, true],

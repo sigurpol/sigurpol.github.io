@@ -664,11 +664,14 @@ function renderCollateral(c) {
   const share = c.inflow_share === null ? "n/a" : `${nf(c.inflow_share * 100, 0)}%`;
   const cover = c.breakeven_price === null ? ""
     : short ? ` The inflow would cover it with DOT above ${price(c.breakeven_price)}.` : ` The inflow covers it while DOT stays above ${price(c.breakeven_price)}.`;
-  document.getElementById("mint-out").innerHTML = [
-    `<p>Collateral uses ${share} of the buffer inflow.${cover}</p>`,
-    `<p>Liquidation if DOT falls below ${price(c.liquidation_price_buffer)} with the whole buffer behind the debt, or ${price(c.liquidation_price_collateral)} on collateral alone.</p>`,
-    `<p class="mint-status ${status[0]}">${status[1]}</p>`,
-  ].join("");
+  const noDebt = !(inp.dap_operational_dotusd > 0);
+  document.getElementById("mint-out").innerHTML = noDebt
+    ? "<p>operational_costs is 0, so no dotUSD is minted. There is no debt and nothing to liquidate.</p>"
+    : [
+      `<p>Collateral uses ${share} of the buffer inflow.${cover}</p>`,
+      `<p>Liquidation if DOT falls below ${price(c.liquidation_price_buffer)} with the whole buffer behind the debt, or ${price(c.liquidation_price_collateral)} on collateral alone.</p>`,
+      `<p class="mint-status ${status[0]}">${status[1]}</p>`,
+    ].join("");
   const cls = { green: "pos", amber: "warn", red: "neg" };
   document.getElementById("mint-years-title").textContent =
     `From ${BAKED.read_date}, DOT at $${nf(inp.dot_price, 3)}, interest ${nf(inp.interest_rate * 100, 1)}%.`;
@@ -676,7 +679,7 @@ function renderCollateral(c) {
     "<tr><th>Year</th><th>dotUSD minted</th><th>Debt</th><th>Collateral</th><th>Interest</th><th>Buffer inflow</th><th>Free buffer</th><th>Liquidation</th><th>Status</th></tr>" +
     c.years.map((r) => `<tr><td>${r.year}</td><td>${nf(r.minted / 1e6, 2)}M</td><td>${nf(r.debt / 1e6, 2)}M</td><td>${mdot(r.collateral)}</td>
       <td>${mdot(r.interest)}</td><td>${mdot(r.inflow)}</td><td class="${r.free < 0 ? "neg" : ""}">${mdot(r.free)}</td>
-      <td>${price(r.liquidation_price)}</td><td class="${cls[r.status]}">${r.status}</td></tr>`).join("");
+      <td>${r.debt > 0 ? price(r.liquidation_price) : "–"}</td><td class="${cls[r.status]}">${r.status}</td></tr>`).join("");
   document.getElementById("mint-years-out").innerHTML =
     `<p>${c.runs_out_year ? `The buffer runs out in year ${c.runs_out_year}.` : "The buffer lasts the whole horizon."}</p>` +
     "<p class=\"note\">If nominators move to dotUSD or Valar stability pools, governance can lower staker_rewards. The freed share goes to the buffer and extends the runway.</p>";

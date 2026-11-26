@@ -140,7 +140,7 @@ code { font-family: var(--font-data); font-size: 12px; }
         <h2>Validator earnings per month</h2>
         <p class="note">Averaged over many months. A validator is picked for collation in some eras only, so single months vary.</p>
         <div class="table-wrap"><table id="t-opts"></table></div>
-        <div class="third-row" id="third-row"><span>Third row: a validator that collates only on</span></div>
+        <div class="third-row" id="third-row"><span>Selected chains:</span></div>
         <div class="opt-notes" id="opt-notes"></div>
       </section>
 
@@ -483,7 +483,7 @@ function buildInputs() {
   });
 }
 
-const OPTIONS = [["everywhere", "Validates and collates on every chain"], ["validate_only", "Validates only"], ["selection", "Validates and collates on the chains ticked below"]];
+const OPTIONS = [["everywhere", "Validates and collates on every chain"], ["validate_only", "Validates only"], ["selection", "Validates and collates on the selected chains"]];
 
 function drawHint(out) {
   const E = inp.eras_per_month;
@@ -492,11 +492,11 @@ function drawHint(out) {
   if (counts.length === 0) return "";
   const vals = new Set(counts.map(([, v]) => v));
   if (vals.size === 1 && !vals.has("every era")) {
-    return `On the ticked chains a validator collates in about ${counts[0][1]} of ${E} eras per month on each chain, at the current caps.`;
+    return `On the selected chains a validator collates in about ${counts[0][1]} of ${E} eras per month on each chain, at the current caps.`;
   }
   const parts = counts.map(([n, v]) => v === "every era" ? `every era on ${SHORT[n]}` : `${v} of ${E} eras on ${SHORT[n]}`);
   const listed = parts.length === 1 ? parts[0] : parts.slice(0, -1).join(", ") + " and " + parts.at(-1);
-  return `On the ticked chains a validator collates in about ${listed} per month.`;
+  return `On the selected chains a validator collates in about ${listed} per month.`;
 }
 
 // Every validator in the draw on every chain: all active validators collate on every chain.

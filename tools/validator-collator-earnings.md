@@ -128,7 +128,7 @@ chain settings say.
 
 1. Validates and collates on every chain.
 2. Validates only. It is not among the collating metanodes anywhere and earns relay points only.
-3. Validates and collates on the chains ticked next to the table (`--collate-on` in the CLI).
+3. Validates and collates on the selected chains (`--collate-on` in the CLI).
 
 Each option has its own total `P`, because the validator's choice changes who can be drawn. A
 validator that only validates earns less than if no validator collated, because the collation

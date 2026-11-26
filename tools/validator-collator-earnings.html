@@ -175,9 +175,9 @@ const BAKED = {
   own_stake: 0.0122,
   collation_points_read: null,
   chains: {
-    "asset-hub": { block_ms: 2028, others: 14 },
-    "people": { block_ms: 2016, others: 14 },
-    "bulletin": { block_ms: 6061, others: 8 },
+    "asset-hub": { block_ms: 2000, others: 14 },
+    "people": { block_ms: 2000, others: 14 },
+    "bulletin": { block_ms: 6000, others: 8 },
   },
 };
 // StakingPointsConverter::MaxPointsPerService on Asset Hub Westend.
@@ -423,7 +423,7 @@ function buildInputs() {
     const cb = p.querySelector("input");
     cb.addEventListener("change", () => { c().enabled = cb.checked; render(); });
     syncers.push(() => { cb.checked = c().enabled; p.classList.toggle("off", !c().enabled); });
-    field(p, `k-${name}`, "Metanodes collating on this chain", "Metanodes with session keys and a running collator for this chain. Each era the draw picks MaxCollators of them.", 0, BAKED.validators, 1,
+    field(p, `k-${name}`, "Metanodes collating on this chain", "", 0, BAKED.validators, 1,
       () => Math.min(c().collators || inp.validators, inp.validators), (v) => c().collators = Math.round(v) >= inp.validators ? null : Math.round(v));
     // The slider spans 0 to the number of active validators, which can change.
     syncers.unshift(() => {
@@ -431,7 +431,6 @@ function buildInputs() {
       document.getElementById(`k-${name}`).max = inp.validators;
     });
     field(p, `o-${name}`, "Invulnerables and candidates", "", 0, 50, 1, () => c().others, (v) => c().others = Math.round(v));
-    field(p, `bt-${name}`, "Block time, ms", "Average time between blocks on this chain, measured.", 500, 12000, 1, () => c().block_ms, (v) => c().block_ms = v);
   }
   const resetButton = (parent, label, reset) => {
     const b = document.createElement("button");
@@ -446,7 +445,7 @@ function buildInputs() {
   });
   resetButton(box, "Reset system chains", (d) => {
     for (const [name, c] of Object.entries(inp.chains)) {
-      for (const k of ["enabled", "collators", "others", "block_ms"]) c[k] = d.chains[name][k];
+      for (const k of ["enabled", "collators", "others"]) c[k] = d.chains[name][k];
     }
   });
 }

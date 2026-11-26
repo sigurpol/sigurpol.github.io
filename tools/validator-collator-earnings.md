@@ -29,7 +29,7 @@ The defaults are read from Polkadot with the `dot` CLI on 2026-11-26.
 | Validators scored | Number of entries in `ErasRewardPoints`, about 400 in those eras |
 | Active validators | Asset Hub `Staking.ValidatorCount`, 320 |
 | Self-stake share | Median of own / total in `Staking.ErasStakersOverview`, era 2364 |
-| Block times | Measured from `Timestamp.Now` over the last 10,000 blocks of each chain |
+| Block times | Configured values: Asset Hub 2 s, People 2 s, Bulletin 6 s. Measured averages are within 1% of these |
 | Invulnerables and candidates | `CollatorSelection.Invulnerables` and `CandidateList` on each chain |
 
 The DOT price is an input. The metanode cost is an input and defaults to 2000 USD per month.

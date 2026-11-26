@@ -59,16 +59,20 @@ buffer and other recipients, which do not affect validator earnings.
 
 ## Operational costs
 
-Operational costs are a third income for validators only. They are meant to pay for a metanode's
-fixed costs, such as network, hardware and electricity. They are paid in dotUSD, Polkadot's
-stablecoin, where 1 dotUSD is 1 USD. The planned level is about 2,000 dotUSD per validator per month.
+Operational costs are a planned DAP outflow, paid only to validators. They are meant to pay for a
+metanode's fixed costs, such as network, hardware and electricity. They are paid in dotUSD, Polkadot's
+stablecoin, where 1 dotUSD is 1 USD. DAP then pays out more than one asset. This dotUSD budget is
+separate from the DOT shares. It does not change `staker_rewards`, `validator_incentive` or the DAP
+buffer, and the 100% check covers the DOT shares only.
 
-They are not in DAP or in the SDK yet, so the tool treats them as an input with a default of 0.
+The input is the DAP total per era in dotUSD. It is not in DAP or in the SDK yet, so the default is 0.
+The proposal is about 21,333 dotUSD per era, which is 2,000 dotUSD per validator per month for 320
+validators and 30 eras.
 
-The pool per era is the number of active validators times the amount, divided by the eras per
-month. It is paid by era points, like the other budgets, without self-stake weighting. Nominators
-get none of it. A validator with average points receives exactly the amount. A validator with more
-points, for example one picked for collation more often, receives more.
+The budget is paid by era points, like the other budgets, without self-stake weighting. Nominators
+get none of it. A validator with average points receives the amount per era times the eras per month,
+divided by the active validators. A validator with more points, for example one picked for collation
+more often, receives more.
 
 The tables show all earnings in DOT and USD. Operational costs are converted to DOT with the DOT
 price, so their USD value does not move with the price.
@@ -86,7 +90,7 @@ are treated as average.
 For one era:
 
 - `P` is the total of all era points.
-- `pot` is the staker pot, `budget` the incentive budget and `ops` the operational costs pool, all
+- `pot` is the staker pot, `budget` the incentive budget and `ops` the operational_costs budget, all
   in DOT per era.
 - `own` is the validator's self-stake share of its exposure.
 - `w` is the validator's incentive weight divided by the mean weight. In era 2364 the 10th
@@ -219,4 +223,4 @@ proposals. The defaults are the Westend values.
 - `MaxCollators`: `UpTo(20)` on each chain.
 - `PointsPerService (para, Collation)`: 20 on Asset Hub, 10 on People, 20 on Bulletin.
 
-Operational costs are not on Polkadot yet either. Their default is 0.
+The DAP operational_costs budget is not on Polkadot yet either. Its default is 0.

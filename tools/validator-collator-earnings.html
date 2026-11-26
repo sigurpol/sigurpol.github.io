@@ -413,7 +413,31 @@ function buildInputs() {
   buildThirdRow();
   const g = document.getElementById("globals");
   field(document.getElementById("costs"), "cost", "Metanode cost, USD per month", "", 0, 10000, 50, () => inp.metanode_cost_usd, (v) => inp.metanode_cost_usd = v);
-  field(document.getElementById("price-panel"), "price", "DOT price, USD", "", 0.01, 20, 0.01, () => inp.dot_price, (v) => inp.dot_price = v);
+  field(document.getElementById("price-panel"), "price", "DOT price, USD", "", 0.001, 20, 0.001, () => inp.dot_price, (v) => inp.dot_price = v);
+  const pricePanel = document.getElementById("price-panel");
+  const fetchBtn = document.createElement("button");
+  fetchBtn.type = "button";
+  fetchBtn.className = "btn";
+  fetchBtn.textContent = "Fetch current price";
+  const priceNote = document.createElement("p");
+  priceNote.className = "note";
+  fetchBtn.addEventListener("click", async () => {
+    fetchBtn.disabled = true;
+    priceNote.textContent = "Fetching…";
+    try {
+      const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=polkadot&vs_currencies=usd");
+      const usd = (await res.json())?.polkadot?.usd;
+      if (!res.ok || !Number.isFinite(usd)) throw new Error();
+      inp.dot_price = +usd.toFixed(3);
+      priceNote.textContent = `CoinGecko, ${new Date().toLocaleTimeString()}`;
+      render();
+    } catch {
+      priceNote.textContent = "Could not fetch the price. Try again later.";
+    } finally {
+      fetchBtn.disabled = false;
+    }
+  });
+  pricePanel.append(fetchBtn, priceNote);
   field(g, "own", "Self-stake share of exposure, %", "median of the last era", 0, 100, 0.01, () => +(inp.own_stake * 100).toFixed(2), (v) => inp.own_stake = v / 100);
   field(g, "N", "Active validators", "", 20, 1000, 1, () => inp.validators, (v) => inp.validators = Math.round(v));
   field(g, "relay", "Relay points per validator per era", "", 0, 1000000, 100, () => Math.round(inp.relay_points_total / inp.validators_read), (v) => inp.relay_points_total = v * inp.validators_read);

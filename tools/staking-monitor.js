@@ -41,6 +41,23 @@ const ERA_TOLERANCE = 300_000;
 // `MILLISECONDS_PER_YEAR` of the runtime issuance curves.
 export const YEAR_MS = 31_557_600_000;
 
+// Gross return of each validator on its own stake for the era, as `payout_stakers` pays it with
+// zero commission: own share of its staker reward plus its validator incentive. The incentive
+// share is weight × points over ErasSumWeightedPoints, or weight over
+// ErasSumValidatorIncentiveWeight for eras before WeightedPointsFormulaStartEra.
+function validatorReturns(overview, individual, totalPoints, reward, budget, incentive) {
+  const sum = Number(incentive.weightedPoints ? incentive.sumWeightedPoints : incentive.sumWeight);
+  return overview
+    .map((x) => ({ who: x.keyArgs[1], own: Number(x.value.own), total: Number(x.value.total), points: individual.get(x.keyArgs[1]) ?? 0 }))
+    .filter((v) => v.own && v.points && totalPoints)
+    .map((v) => {
+      const staker = (Number(reward ?? 0n) * v.points) / totalPoints * (v.own / v.total);
+      const weight = incentive.weights.get(v.who) ?? 0;
+      const share = !sum ? 0 : incentive.weightedPoints ? (weight * v.points) / sum : weight / sum;
+      return (staker + Number(budget ?? 0n) * share) / v.own;
+    });
+}
+
 const median = (values) => {
   if (!values.length) return undefined;
   const sorted = [...values].sort((a, b) => a - b);
@@ -290,6 +307,7 @@ export class Monitor {
       historyDepth,
       planningOffset,
       disableMinting,
+      weightedPointsStart: disableMinting ? await q("Staking.WeightedPointsFormulaStartEra") : undefined,
       totalIssuance: await q("Balances.TotalIssuance"),
     };
   }
@@ -456,6 +474,20 @@ export class Monitor {
     });
   }
 
+  async readIncentive(e, weightedPointsStart) {
+    const ah = this.ah;
+    const [weights, sumWeight, sumWeightedPoints] = await Promise.all([
+      ah.entries("Staking.ErasValidatorIncentiveWeight", e), ah.q("Staking.ErasSumValidatorIncentiveWeight", e),
+      ah.q("Staking.ErasSumWeightedPoints", e),
+    ]);
+    return {
+      weights: new Map((weights ?? []).map((x) => [x.keyArgs[1], Number(x.value)])),
+      sumWeight,
+      sumWeightedPoints,
+      weightedPoints: weightedPointsStart === undefined || e >= weightedPointsStart,
+    };
+  }
+
   async readRewards(era, count, token) {
     const ah = this.ah;
     // payout_stakers accepts eras down to CurrentEra - HistoryDepth.
@@ -472,6 +504,7 @@ export class Monitor {
             ah.q("Staking.ErasValidatorIncentiveBudget", e), ah.q("Staking.ErasTotalStake", e),
             ah.entries("Staking.ErasStakersOverview", e),
           ]);
+          const incentive = era.disableMinting ? await this.readIncentive(e, era.weightedPointsStart) : undefined;
           // Gross nominator return per validator for the era: reward share over its backing.
           const individual = new Map(points?.individual ?? []);
           const returns = (overview ?? [])
@@ -483,6 +516,8 @@ export class Monitor {
             reward,
             budget,
             stake,
+            sumIncentiveWeight: incentive?.sumWeight,
+            validatorReturn: incentive && median(validatorReturns(overview ?? [], individual, points?.total, reward, budget, incentive)),
             validators: overview?.length ?? 0,
             withoutPoints: (overview?.length ?? 0) - returns.length,
             medianReturn: median(returns),
@@ -536,7 +571,10 @@ export class Monitor {
       .then((evs) => evs.filter((e) => e.name === "Rewarded").reduce((t, e) => t + e.value[2], 0n))
       .catch(() => undefined);
     const lastEra = change.prev.index;
-    const [reward, budget] = await Promise.all([ah.q("Staking.ErasValidatorReward", lastEra), ah.q("Staking.ErasValidatorIncentiveBudget", lastEra)]);
+    const [reward, budget, optimumSelfStake, hardCapSelfStake, selfStakeSlopeFactor] = await Promise.all([
+      ah.q("Staking.ErasValidatorReward", lastEra), ah.q("Staking.ErasValidatorIncentiveBudget", lastEra),
+      ah.q("Staking.OptimumSelfStake"), ah.q("Staking.HardCapSelfStake"), ah.q("Staking.SelfStakeSlopeFactor"),
+    ]);
     const inflation = ah.has("api:Inflation") ? await ah.api.apis.Inflation.experimental_issuance_prediction_info({ at: ah.best.hash }) : undefined;
     const cap = this.network.hardCap !== undefined ? this.network.hardCap * 10n ** BigInt(token.decimals) : undefined;
     return {
@@ -554,6 +592,7 @@ export class Monitor {
       inflationEraMs: this.network.inflationEraMs,
       curve: this.network.issuanceCurve,
       cap,
+      selfStake: { optimum: optimumSelfStake, hardCap: hardCapSelfStake, slopeFactor: selfStakeSlopeFactor },
       lastEra: {
         era: lastEra,
         from: prevChange.n,

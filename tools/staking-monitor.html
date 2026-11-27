@@ -136,7 +136,7 @@ a.addr:hover { text-decoration: underline; }
 
 <script type="module">
 // Bump the version whenever the JS changes, so browsers don't pair new HTML with a cached old JS.
-import { Monitor, NETWORKS, YEAR_MS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=6";
+import { Monitor, NETWORKS, YEAR_MS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=7";
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -317,13 +317,15 @@ function renderRewards(snap) {
     <td class="num">${num(r.withoutPoints)}</td>
     <td class="num">${pct(r.medianReturn * erasPerYear, 2)}</td>
     <td class="num">${pct(r.meanReturn * erasPerYear, 2)}</td>
+    ${dap ? `<td class="num">${pct(r.validatorReturn * erasPerYear, 2)}</td><td class="num">${num(r.sumIncentiveWeight)}</td>` : ""}
     <td class="num">${num(r.unclaimed)} <small>of ${num(r.pages)}</small></td>
     ${dap ? `<td class="num">${tok(r.pot, 0)}</td>` : ""}</tr>`).join("");
   $("rewards").innerHTML = `${head("Era rewards")}
     <div class="table-wrap"><table><thead><tr><th>Era</th><th class="num">Sessions</th><th class="num">ErasRewardPoints</th>
     <th class="num">ErasValidatorReward</th>${dap ? `<th class="num">ErasValidatorIncentiveBudget</th>` : ""}
     <th class="num">ErasTotalStake</th><th class="num">Validators</th><th class="num">Validators without points</th>
-    <th class="num">Gross nominator APY median</th><th class="num">Gross nominator APY stake-weighted</th><th class="num">Unclaimed pages</th>
+    <th class="num">Gross nominator APY median</th><th class="num">Gross nominator APY stake-weighted</th>
+    ${dap ? `<th class="num">Gross validator APY median</th><th class="num">ErasSumValidatorIncentiveWeight</th>` : ""}<th class="num">Unclaimed pages</th>
     ${dap ? `<th class="num">Era pot balance</th>` : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -373,6 +375,9 @@ function renderDap(snap, is) {
     ["IssuanceCadence", dur(is.cadence)],
     ["MaxElapsedPerDrip", dur(is.maxElapsed)],
     ["Staking.DisableMinting", String(e.disableMinting)],
+    ["OptimumSelfStake", tok(is.selfStake.optimum, 0)],
+    ["HardCapSelfStake", tok(is.selfStake.hardCap, 0)],
+    ["SelfStakeSlopeFactor", perbill(is.selfStake.slopeFactor)],
     ...inflationRows(is.inflation, snap),
   ]);
   $("issuance").innerHTML = `${head("Issuance and DAP")}<div class="stats">${stats}</div>

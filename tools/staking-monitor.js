@@ -39,7 +39,14 @@ const POT_POOL_SIZE = 200;
 // Asset Hub activates an era a little after the relay activation timestamp in ActiveEra.start.
 const ERA_TOLERANCE = 300_000;
 // `MILLISECONDS_PER_YEAR` of the runtime issuance curves.
-const YEAR_MS = 31_557_600_000;
+export const YEAR_MS = 31_557_600_000;
+
+const median = (values) => {
+  if (!values.length) return undefined;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
 // Claimed pages change all the time but are costly to read, so they are re-read at most this often.
 const CLAIMS_TTL = 300_000;
 const PHASE_RANK = { Off: 0, Snapshot: 1, Signed: 2, SignedValidation: 3, Unsigned: 4, Done: 5, Export: 6 };
@@ -465,12 +472,21 @@ export class Monitor {
             ah.q("Staking.ErasValidatorIncentiveBudget", e), ah.q("Staking.ErasTotalStake", e),
             ah.entries("Staking.ErasStakersOverview", e),
           ]);
+          // Gross nominator return per validator for the era: reward share over its backing.
+          const individual = new Map(points?.individual ?? []);
+          const returns = (overview ?? [])
+            .map((x) => [individual.get(x.keyArgs[1]) ?? 0, Number(x.value.total)])
+            .filter(([p, backing]) => p && backing)
+            .map(([p, backing]) => (Number(reward ?? 0n) * p) / points.total / backing);
           return {
             points: points?.total ?? 0,
             reward,
             budget,
             stake,
             validators: overview?.length ?? 0,
+            withoutPoints: (overview?.length ?? 0) - returns.length,
+            medianReturn: median(returns),
+            meanReturn: stake ? Number(reward ?? 0n) / Number(stake) : undefined,
             pageCounts: new Map((overview ?? []).map((x) => [x.keyArgs[1], x.value.page_count])),
           };
         });

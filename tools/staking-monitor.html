@@ -136,7 +136,7 @@ a.addr:hover { text-decoration: underline; }
 
 <script type="module">
 // Bump the version whenever the JS changes, so browsers don't pair new HTML with a cached old JS.
-import { Monitor, NETWORKS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=5";
+import { Monitor, NETWORKS, YEAR_MS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=6";
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -306,6 +306,7 @@ function renderRewards(snap) {
   const rw = snap.rewards;
   if (rw.error) return failed("rewards", "Era rewards", rw.error);
   const dap = snap.era.disableMinting;
+  const erasPerYear = snap.relay.error ? NaN : YEAR_MS / (snap.era.sessionsPerEra * snap.relay.sessionMs);
   const rows = rw.rows.map((r) => `<tr><td>${r.era}${r.era === rw.oldest ? "<small>oldest claimable</small>" : ""}</td>
     <td class="num">${num(r.sessions)}</td>
     <td class="num">${num(r.points)}</td>
@@ -313,12 +314,16 @@ function renderRewards(snap) {
     ${dap ? `<td class="num">${tok(r.budget, 0)}</td>` : ""}
     <td class="num">${tok(r.stake, 0)}</td>
     <td class="num">${num(r.validators)}</td>
+    <td class="num">${num(r.withoutPoints)}</td>
+    <td class="num">${pct(r.medianReturn * erasPerYear, 2)}</td>
+    <td class="num">${pct(r.meanReturn * erasPerYear, 2)}</td>
     <td class="num">${num(r.unclaimed)} <small>of ${num(r.pages)}</small></td>
     ${dap ? `<td class="num">${tok(r.pot, 0)}</td>` : ""}</tr>`).join("");
   $("rewards").innerHTML = `${head("Era rewards")}
     <div class="table-wrap"><table><thead><tr><th>Era</th><th class="num">Sessions</th><th class="num">ErasRewardPoints</th>
     <th class="num">ErasValidatorReward</th>${dap ? `<th class="num">ErasValidatorIncentiveBudget</th>` : ""}
-    <th class="num">ErasTotalStake</th><th class="num">Validators</th><th class="num">Unclaimed pages</th>
+    <th class="num">ErasTotalStake</th><th class="num">Validators</th><th class="num">Validators without points</th>
+    <th class="num">Gross nominator APY median</th><th class="num">Gross nominator APY stake-weighted</th><th class="num">Unclaimed pages</th>
     ${dap ? `<th class="num">Era pot balance</th>` : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 

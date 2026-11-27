@@ -172,7 +172,7 @@ code { font-family: var(--font-data); font-size: 12px; }
       </section>
 
       <section class="panel" id="mint-years-panel" hidden>
-        <h2>DAP buffer and dotUSD debt, year by year</h2>
+        <h2 id="mint-years-h2">DAP buffer and dotUSD debt, year by year</h2>
         <div class="table-wrap"><table id="t-mint-years"></table></div>
         <p class="note" id="mint-years-title"></p>
         <div class="mint-out" id="mint-years-out"></div>
@@ -228,7 +228,7 @@ function defaultInputs(d) {
     own_stake: d.own_stake, incentive_weight: 1, validators: d.validators, relay_points_total: d.relay_points_total,
     validators_read: d.validators_read, eras_per_month: 30,
     era_hours: 24, metanode_cost_usd: METANODE_COST_USD, dap_operational_dotusd: 0,
-    mint_collateral: false, collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO,
+    mint_collateral: false, dotusd_source: "borrow", collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO,
     dap_buffer_balance: d.dap_buffer_balance, interest_rate: 0, horizon_years: HORIZON_YEARS, chains };
 }
 
@@ -304,6 +304,35 @@ function collateral(inp) {
   };
 }
 
+// Can the DAP buffer pay operational_costs by selling DOT for dotUSD each year?
+function buy(inp) {
+  const erasYear = 365 * 24 / inp.era_hours;
+  const share = Math.max(1 - inp.dap_staker_rewards - inp.dap_validator_incentive, 0);
+  const price = inp.dot_price;
+  const inflow = inp.issuance_per_era * share * erasYear;
+  const bought = inp.dap_operational_dotusd * erasYear;
+  const sold = bought / price;
+  const surplus = inflow - sold;
+  const status = surplus >= 0 ? "ok" : -surplus <= inp.dap_buffer_balance ? "buffer" : "short";
+
+  const years = [];
+  let cumInflow = 0, runsOut = null;
+  for (let y = 1; y <= inp.horizon_years; y++) {
+    const yInflow = yearInflow(inp, y, erasYear, share);
+    cumInflow += yInflow;
+    const free = inp.dap_buffer_balance + cumInflow - sold * y;
+    const yStatus = free < 0 ? "red" : yInflow >= sold ? "green" : "amber";
+    if (free < 0 && runsOut === null) runsOut = y;
+    years.push({ year: y, bought, sold, inflow: yInflow, free, status: yStatus });
+  }
+  return {
+    eras_per_year: erasYear, inflow_year: inflow, bought_year: bought, sold_year: sold,
+    inflow_share: inflow > 0 ? sold / inflow : null, surplus_year: surplus,
+    breakeven_price: inflow > 0 ? bought / inflow : null,
+    status, years, runs_out_year: runsOut,
+  };
+}
+
 // One era with the validator's collation choice per chain. The other validators follow the chain settings.
 function world(inp, collate) {
   const N = inp.validators;
@@ -364,6 +393,7 @@ function model(inp) {
     breakeven: everywhere.breakeven,
     share_breakeven: everywhere.share_breakeven,
     collateral: collateral(inp),
+    buy: buy(inp),
   };
 }
 if (typeof module !== "undefined") module.exports = { BAKED, defaultInputs, model };
@@ -418,10 +448,22 @@ function checkbox(parent, id, text, hint, get, set) {
   syncers.push(() => box.checked = get());
 }
 
+function radios(parent, name, options, get, set) {
+  for (const [value, text] of options) {
+    const el = document.createElement("label");
+    el.className = "me";
+    el.innerHTML = `<input type="radio" name="${name}" id="${name}-${value}" value="${value}"><span>${text}</span>`;
+    parent.appendChild(el);
+    const radio = el.querySelector("input");
+    radio.addEventListener("change", () => { if (radio.checked) { set(value); render(); } });
+    syncers.push(() => radio.checked = get() === value);
+  }
+}
+
 function resetGovernance() {
   for (const [name, c] of Object.entries(inp.chains)) { c.pps = WESTEND_PPS[name]; c.cap = WESTEND_CAP; }
   Object.assign(inp, { issuance_per_era: BAKED.issuance_per_era, dap_staker_rewards: BAKED.dap_staker_rewards,
-    dap_validator_incentive: BAKED.dap_validator_incentive, dap_operational_dotusd: 0, mint_collateral: false,
+    dap_validator_incentive: BAKED.dap_validator_incentive, dap_operational_dotusd: 0, mint_collateral: false, dotusd_source: "borrow",
     collateral_ratio: COLLATERAL_RATIO, liquidation_ratio: LIQUIDATION_RATIO, dap_buffer_balance: BAKED.dap_buffer_balance,
     interest_rate: 0, horizon_years: HORIZON_YEARS });
 }
@@ -462,15 +504,20 @@ function buildDap() {
     <input type="number" id="ops-per-validator" disabled><span class="unit">dotUSD/month</span>
     <input type="range" id="ops-per-validator-r" min="0" max="10000" step="1" disabled aria-label="Per validator, dotUSD/month">`;
   box.appendChild(perVal);
-  checkbox(box, "mint", "Mint operational costs as dotUSD against the DAP buffer", "", () => inp.mint_collateral, (v) => inp.mint_collateral = v);
+  checkbox(box, "mint", "Pay operational costs from the DAP buffer", "", () => inp.mint_collateral, (v) => inp.mint_collateral = v);
   const mint = document.createElement("div");
   mint.id = "mint-box";
   mint.className = "mint-box";
   box.appendChild(mint);
-  field(mint, "cr", "Collateral ratio, %", "", 100, 500, 5, () => +(inp.collateral_ratio * 100).toFixed(1), (v) => inp.collateral_ratio = v / 100);
-  field(mint, "lr", "Liquidation ratio, %", "", 100, 300, 5, () => +(inp.liquidation_ratio * 100).toFixed(1), (v) => inp.liquidation_ratio = v / 100);
+  radios(mint, "dotusd-source", [["borrow", "Borrow dotUSD against the buffer"], ["buy", "Buy dotUSD with buffer DOT"]],
+    () => inp.dotusd_source, (v) => inp.dotusd_source = v);
+  const borrowOnly = [
+    field(mint, "cr", "Collateral ratio, %", "", 100, 500, 5, () => +(inp.collateral_ratio * 100).toFixed(1), (v) => inp.collateral_ratio = v / 100),
+    field(mint, "lr", "Liquidation ratio, %", "", 100, 300, 5, () => +(inp.liquidation_ratio * 100).toFixed(1), (v) => inp.liquidation_ratio = v / 100),
+  ];
   field(mint, "buffer-balance", "DAP buffer balance, DOT", "", 0, 50000000, 10000, () => Math.round(inp.dap_buffer_balance), (v) => inp.dap_buffer_balance = v);
-  field(mint, "interest", "Interest on the dotUSD debt, %/yr", "", 0, 20, 0.1, () => +(inp.interest_rate * 100).toFixed(2), (v) => inp.interest_rate = v / 100);
+  borrowOnly.push(field(mint, "interest", "Interest on the dotUSD debt, %/yr", "", 0, 20, 0.1, () => +(inp.interest_rate * 100).toFixed(2), (v) => inp.interest_rate = v / 100));
+  syncers.push(() => borrowOnly.forEach((el) => el.hidden = inp.dotusd_source === "buy"));
   field(mint, "horizon", "Horizon, years", "", 1, 6, 1, () => inp.horizon_years, (v) => inp.horizon_years = Math.min(6, Math.max(1, Math.round(v))));
   const out = document.createElement("p");
   out.className = "note gov-out neg";
@@ -673,6 +720,7 @@ function renderCollateral(c) {
       `<p class="mint-status ${status[0]}">${status[1]}</p>`,
     ].join("");
   const cls = { green: "pos", amber: "warn", red: "neg" };
+  document.getElementById("mint-years-h2").textContent = "DAP buffer and dotUSD debt, year by year";
   document.getElementById("mint-years-title").textContent =
     `From ${BAKED.read_date}, DOT at $${nf(inp.dot_price, 3)}, interest ${nf(inp.interest_rate * 100, 1)}%.`;
   document.getElementById("t-mint-years").innerHTML =
@@ -680,6 +728,44 @@ function renderCollateral(c) {
     c.years.map((r) => `<tr><td>${r.year}</td><td>${nf(r.minted / 1e6, 2)}M</td><td>${nf(r.debt / 1e6, 2)}M</td><td>${mdot(r.collateral)}</td>
       <td>${mdot(r.interest)}</td><td>${mdot(r.inflow)}</td><td class="${r.free < 0 ? "neg" : ""}">${mdot(r.free)}</td>
       <td>${r.debt > 0 ? price(r.liquidation_price) : "–"}</td><td class="${cls[r.status]}">${r.status}</td></tr>`).join("");
+  document.getElementById("mint-years-out").innerHTML =
+    `<p>${c.runs_out_year ? `The buffer runs out in year ${c.runs_out_year}.` : "The buffer lasts the whole horizon."}</p>` +
+    "<p class=\"note\">If nominators move to dotUSD or Valar stability pools, governance can lower staker_rewards. The freed share goes to the buffer and extends the runway.</p>";
+}
+
+// The buy check in the results column: the DAP sells buffer DOT for the dotUSD each year.
+function renderBuy(c) {
+  const price = (v) => v === null ? "n/a" : `$${nf(v, 2)}`, mdot = (v) => `${nf(v / 1e6, 2)}M DOT`;
+  const perEra = (v) => `${nf(v / c.eras_per_year)} DOT`;
+  const short = c.surplus_year < 0;
+  document.getElementById("t-mint").innerHTML =
+    "<tr><th></th><th>Per era</th><th>Per year</th></tr>" +
+    `<tr><td>Buffer inflow</td><td>${perEra(c.inflow_year)}</td><td>${mdot(c.inflow_year)}</td></tr>` +
+    `<tr><td>DOT sold</td><td>${perEra(c.sold_year)}</td><td>${mdot(c.sold_year)}</td></tr>` +
+    `<tr class="${short ? "neg" : ""}"><td>${short ? "Shortfall" : "Left in the buffer"}</td><td>${perEra(Math.abs(c.surplus_year))}</td><td>${mdot(Math.abs(c.surplus_year))}</td></tr>`;
+  document.getElementById("mint-formula").textContent =
+    `DOT sold = operational_costs ÷ DOT price (${nf(inp.dap_operational_dotusd)} dotUSD at $${nf(inp.dot_price, 3)}).`;
+  const status = {
+    ok: ["pos", `The buffer inflow covers the DOT sold. ${mdot(c.surplus_year)} per year stay in the buffer.`],
+    buffer: ["warn", `The DOT sold exceeds the buffer inflow by ${mdot(-c.surplus_year)} per year. The buffer balance of ${mdot(inp.dap_buffer_balance)} covers it.`],
+    short: ["neg", `The DOT sold exceeds the buffer inflow by ${mdot(-c.surplus_year)} per year, more than the buffer balance of ${mdot(inp.dap_buffer_balance)}.`],
+  }[c.status];
+  const share = c.inflow_share === null ? "n/a" : `${nf(c.inflow_share * 100, 0)}%`;
+  const cover = c.breakeven_price === null ? ""
+    : short ? ` The inflow would cover it with DOT above ${price(c.breakeven_price)}.` : ` The inflow covers it while DOT stays above ${price(c.breakeven_price)}.`;
+  document.getElementById("mint-out").innerHTML = !(inp.dap_operational_dotusd > 0)
+    ? "<p>operational_costs is 0, so no DOT is sold.</p>"
+    : [
+      `<p>Selling uses ${share} of the buffer inflow.${cover}</p>`,
+      `<p class="mint-status ${status[0]}">${status[1]}</p>`,
+    ].join("");
+  const cls = { green: "pos", amber: "warn", red: "neg" };
+  document.getElementById("mint-years-h2").textContent = "DAP buffer and DOT sold, year by year";
+  document.getElementById("mint-years-title").textContent = `From ${BAKED.read_date}, DOT at $${nf(inp.dot_price, 3)}.`;
+  document.getElementById("t-mint-years").innerHTML =
+    "<tr><th>Year</th><th>dotUSD bought</th><th>DOT sold</th><th>Buffer inflow</th><th>Free buffer</th><th>Status</th></tr>" +
+    c.years.map((r) => `<tr><td>${r.year}</td><td>${nf(r.bought / 1e6, 2)}M</td><td>${mdot(r.sold)}</td><td>${mdot(r.inflow)}</td>
+      <td class="${r.free < 0 ? "neg" : ""}">${mdot(r.free)}</td><td class="${cls[r.status]}">${r.status}</td></tr>`).join("");
   document.getElementById("mint-years-out").innerHTML =
     `<p>${c.runs_out_year ? `The buffer runs out in year ${c.runs_out_year}.` : "The buffer lasts the whole horizon."}</p>` +
     "<p class=\"note\">If nominators move to dotUSD or Valar stability pools, governance can lower staker_rewards. The freed share goes to the buffer and extends the runway.</p>";
@@ -700,7 +786,7 @@ function render() {
   document.getElementById("mint-box").hidden = !inp.mint_collateral;
   document.getElementById("mint-panel").hidden = !inp.mint_collateral;
   document.getElementById("mint-years-panel").hidden = !inp.mint_collateral;
-  if (inp.mint_collateral) renderCollateral(out.collateral);
+  if (inp.mint_collateral) inp.dotusd_source === "buy" ? renderBuy(out.buy) : renderCollateral(out.collateral);
   {
     // Split of the gross reward of a validator that collates on every chain.
     const pot = out.pots.staker, budget = inp.incentive_weight * out.pots.incentive;

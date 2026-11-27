@@ -136,6 +136,29 @@ With the doc's inputs (55.93M DOT issuance per year, shares 45.2% / 5.1% / 49.7%
 year, 55% of the inflow, a break-even price of $0.55, a liquidation price of $0.28 with the buffer and
 $0.60 on collateral alone, and a surplus of 12.4M DOT per year. These match the doc.
 
+### Buying dotUSD with buffer DOT
+
+The DAP can also buy the dotUSD by selling DOT from the buffer, instead of borrowing it. The page
+offers both choices. The CLI takes `--dotusd-source borrow` (default) or `--dotusd-source buy`, which
+also turns the check on. Selling needs no collateral, pays no interest and cannot be liquidated. The
+DOT sold is gone. Per year:
+
+- DOT sold = salaries ÷ DOT price.
+- Share of the buffer inflow = DOT sold ÷ inflow.
+- Surplus or shortfall = inflow − DOT sold. A shortfall comes out of the buffer balance.
+- Break-even DOT price = salaries ÷ inflow, the price at which DOT sold equals inflow.
+
+The year-by-year table uses the same horizon, issuance steps and constant DOT price as above. For each
+year:
+
+- Free buffer at year end = buffer balance + all inflow so far − all DOT sold so far.
+- Green means that year's inflow covers that year's DOT sold. Amber means the free buffer stays at or
+  above 0 while savings are drawn down. Red means the free buffer is below 0.
+
+With the doc's inputs the DAP sells 7.68M DOT per year, half the DOT the doc locks as collateral, and
+the break-even price is $0.28. At the defaults, with 21,333 dotUSD per era and DOT at $0.67, it sells
+11.62M DOT per year, 49% of the buffer inflow.
+
 ## How validator earnings are computed
 
 **Validator earnings** are the self-stake share of the staker pot plus the validator's share of

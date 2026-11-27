@@ -713,22 +713,33 @@ export function dapIssuanceCheck(is, token) {
   const share = (key) => Number(is.pots.find((p) => p.key === key)?.share ?? 0) / 1e9;
   const tol = (ratePerMs ?? minted / l.dripMs) * is.cadence;
   const parts = [];
-  if (ratePerMs !== undefined) parts.push({ name: "TotalIssuance increase", actual: minted, expected: ratePerMs * l.dripMs, tol });
+  const rate = (ratePerMs * 1000 / 10 ** token.decimals).toLocaleString("en-US", { maximumFractionDigits: 4 });
+  if (ratePerMs !== undefined) {
+    parts.push({
+      name: "TotalIssuance increase", actual: minted, expected: ratePerMs * l.dripMs, tol,
+      how: `issuance rate ${rate} ${token.symbol}/s × drip window ${Math.round(l.dripMs / 1000)} s`,
+    });
+  }
   parts.push(
     { name: "ErasValidatorReward", actual: Number(l.reward), expected: share("staker_rewards") * minted, tol: share("staker_rewards") * tol },
     { name: "ErasValidatorIncentiveBudget", actual: Number(l.budget), expected: share("validator_incentive") * minted, tol: share("validator_incentive") * tol },
   );
-  // Fees, dust, slashes and expired era pots only add to the buffer, signed rewards take from it.
-  const floor = share("buffer") * minted - Number(l.minerRewards ?? 0n);
+  // Fees, dust, slashes and expired era pots only add to the buffer. Signed rewards are the only
+  // outflow subtracted here: any other buffer spending (e.g. DAP buying or minting dotUSD) must be
+  // subtracted too, or this check warns.
+  const minerRewards = Number(l.minerRewards ?? 0n);
+  const floor = share("buffer") * minted - minerRewards;
   const reserve = Number(l.reserveDelta);
   const reserveStatus = reserve <= 0 || reserve < floor / 2 ? "bad" : reserve < floor - share("buffer") * tol || reserve > 2 * share("buffer") * minted ? "warn" : "ok";
   const statuses = parts.map((p) => ({ ...p, status: compare(p.actual, p.expected, p.tol) }));
-  statuses.push({ name: "DAP buffer inflow (buffer + staging)", actual: reserve, expected: floor, atLeast: true, status: reserveStatus });
-  const rate = ratePerMs === undefined ? "" : ` = issuance rate ${(ratePerMs * 1000 / 10 ** token.decimals).toLocaleString("en-US", { maximumFractionDigits: 4 })} ${token.symbol}/s × drip window ${Math.round(l.dripMs / 1000)} s`;
+  statuses.push({
+    name: "DAP buffer inflow (buffer + staging)", actual: reserve, expected: floor, atLeast: true, status: reserveStatus,
+    how: `buffer ${(share("buffer") * 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}% × ${amount(minted, token)} − signed rewards ${amount(minerRewards, token)}`,
+  });
   const rows = statuses.map((p) => [
     p.status,
     `Era ${l.era} ${p.name}`,
-    `${amount(p.actual, token)} (expected ${p.atLeast ? "at least " : ""}${amount(p.expected, token)}${p.name === "TotalIssuance increase" ? rate : ""})`,
+    `${amount(p.actual, token)} (expected ${p.atLeast ? "at least " : ""}${amount(p.expected, token)}${p.how ? ` = ${p.how}` : ""})`,
   ]);
   if (ratePerMs === undefined) rows.unshift(["warn", `Era ${l.era} TotalIssuance increase`, `${amount(minted, token)} (no expected issuance rate)`]);
   return rows;

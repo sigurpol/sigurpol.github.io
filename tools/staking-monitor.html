@@ -136,7 +136,7 @@ a.addr:hover { text-decoration: underline; }
 
 <script type="module">
 // Bump the version whenever the JS changes, so browsers don't pair new HTML with a cached old JS.
-import { Monitor, NETWORKS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=1";
+import { Monitor, NETWORKS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=2";
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);

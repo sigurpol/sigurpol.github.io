@@ -13,18 +13,23 @@ export const NETWORKS = {
     relay: { name: "Relay chain", url: "wss://rpc.polkadot.io" },
     // HARD_CAP_TARGET in the Polkadot Asset Hub runtime (Referendum 1710), in whole DOT.
     hardCap: 2_100_000_000n,
+    // Era length the runtime's Inflation API assumes for `next_mint`.
+    inflationEraMs: 86_400_000,
   },
   kusama: {
     label: "Kusama",
     subscan: "https://assethub-kusama.subscan.io",
     ah: { name: "Asset Hub", url: "wss://kusama-asset-hub-rpc.polkadot.io" },
     relay: { name: "Relay chain", url: "wss://kusama-rpc.polkadot.io" },
+    inflationEraMs: 21_600_000,
   },
   westend: {
     label: "Westend",
     subscan: "https://assethub-westend.subscan.io",
     ah: { name: "Asset Hub", url: "wss://westend-asset-hub-rpc.polkadot.io" },
     relay: { name: "Relay chain", url: "wss://westend-rpc.polkadot.io" },
+    // `IssuanceCurve` of the Westend Asset Hub runtime: 8% a year of a fixed total issuance.
+    issuanceCurve: { fixedTotalIssuance: 5_216_342_402_773_185_773n, percent: 8n },
   },
 };
 
@@ -33,6 +38,8 @@ const RPC_TIMEOUT = 30_000;
 const POT_POOL_SIZE = 200;
 // Asset Hub activates an era a little after the relay activation timestamp in ActiveEra.start.
 const ERA_TOLERANCE = 300_000;
+// `MILLISECONDS_PER_YEAR` of the runtime issuance curves.
+const YEAR_MS = 31_557_600_000;
 // Claimed pages change all the time but are costly to read, so they are re-read at most this often.
 const CLAIMS_TTL = 300_000;
 const PHASE_RANK = { Off: 0, Snapshot: 1, Signed: 2, SignedValidation: 3, Unsigned: 4, Done: 5, Export: 6 };
@@ -501,10 +508,17 @@ export class Monitor {
     const change = await this.readEraChange(era.active, era.start);
     const prevChange = await this.readEraChange(change.prev.index, change.prev.start);
     const reserve = async (n) => (await free(buffer.account, n)) + (await free(staging, n));
-    const [reserveNow, reserveAt, reservePrev, tiAt, tiPrev] = await Promise.all([
+    const [reserveNow, reserveAt, reservePrev, tiAt, tiPrev, dripAt, dripPrev, round] = await Promise.all([
       Promise.resolve(buffer.balance + stagingBalance), reserve(change.n), reserve(prevChange.n),
       ah.qAt(change.n, "Balances.TotalIssuance"), ah.qAt(prevChange.n, "Balances.TotalIssuance"),
+      ah.qAt(change.n, "Dap.LastIssuanceTimestamp"), ah.qAt(prevChange.n, "Dap.LastIssuanceTimestamp"),
+      ah.qAt(prevChange.n, "MultiBlockElection.Round"),
     ]);
+    // The election of this round ran in the last era. Its signed rewards are paid from the buffer.
+    const minerRewards = await this.cached(`round:${round}`, () => this.readRound(round))
+      .then((r) => (r.queuedAt > prevChange.n && r.queuedAt <= change.n ? r.events : []))
+      .then((evs) => evs.filter((e) => e.name === "Rewarded").reduce((t, e) => t + e.value[2], 0n))
+      .catch(() => undefined);
     const lastEra = change.prev.index;
     const [reward, budget] = await Promise.all([ah.q("Staking.ErasValidatorReward", lastEra), ah.q("Staking.ErasValidatorIncentiveBudget", lastEra)]);
     const inflation = ah.has("api:Inflation") ? await ah.api.apis.Inflation.experimental_issuance_prediction_info({ at: ah.best.hash }) : undefined;
@@ -521,6 +535,8 @@ export class Monitor {
       totalIssuance: era.totalIssuance,
       inactive,
       inflation,
+      inflationEraMs: this.network.inflationEraMs,
+      curve: this.network.issuanceCurve,
       cap,
       lastEra: {
         era: lastEra,
@@ -531,6 +547,8 @@ export class Monitor {
         budget,
         reserveDelta: reserveAt - reservePrev,
         tiDelta: tiAt - tiPrev,
+        dripMs: Number(dripAt - dripPrev),
+        minerRewards,
       },
       thisEra: { reserveDelta: reserveNow - reserveAt, elapsed: era.bestTs - era.start },
     };
@@ -540,17 +558,20 @@ export class Monitor {
     const ah = this.ah;
     const change = await this.readEraChange(era.active, era.start);
     const paid = change.events.find((e) => e.name === "EraPaid");
-    const [inflation, maxEraDuration, maxStaked, reward] = await Promise.all([
+    const [inflation, maxEraDuration, maxStaked, reward, tiBefore, stakePrev] = await Promise.all([
       ah.has("api:Inflation") ? ah.api.apis.Inflation.experimental_issuance_prediction_info({ at: ah.best.hash }) : undefined,
       ah.constant("Staking.MaxEraDuration"), ah.q("Staking.MaxStakedRewards"), ah.q("Staking.ErasValidatorReward", change.prev.index),
+      ah.qAt(change.n - 1, "Balances.TotalIssuance"), ah.q("Staking.ErasTotalStake", change.prev.index),
     ]);
     return {
       kind: "legacy",
       inflation,
       maxEraDuration: Number(maxEraDuration),
       maxStaked,
-      lastEra: { era: change.prev.index, ms: era.start - change.prev.start, paid: paid?.value, reward },
+      lastEra: { era: change.prev.index, ms: era.start - change.prev.start, paid: paid?.value, reward, tiBefore, stakePrev },
+      inflationEraMs: this.network.inflationEraMs,
       totalIssuance: era.totalIssuance,
+      totalStake: era.totalStake,
     };
   }
 }
@@ -577,17 +598,17 @@ export function checks(s) {
     add(status, "Active era", `${era.active}, ${fmtAge(age / 1000)} of ${fmtAge(expected / 1000)}, session ${relay.sessionInEra + 1} of ${era.sessionsPerEra}`);
 
     const planSession = era.sessionsPerEra - Math.min(era.planningOffset, era.sessionsPerEra);
+    // The election starts at the planning session. Blocks it takes: both snapshots, the signed,
+    // signed validation and unsigned phases.
+    const k = el.config;
+    const electionMs = el.error ? undefined : (2 * k.pages + k.signed + k.signedValidation + k.unsigned) * el.msPerBlock;
     if (era.planned > era.active) {
       const stage = nextSetStage(s);
-      // The election starts at the planning session. Blocks it takes: both snapshots, the signed,
-      // signed validation and unsigned phases.
-      const k = el.config;
-      const electionMs = el.error ? undefined : (2 * k.pages + k.signed + k.signedValidation + k.unsigned) * el.msPerBlock;
       const running = now - (era.start + planSession * relay.sessionMs);
       const late = electionMs && running > 2 * electionMs && /^(election|Staking\.NextElectionPage)/.test(stage);
       add(late ? "warn" : "ok", "Planned era", `${era.planned}, ${stage}${late ? `, ${fmtAge(running / 1000)} since planning` : ""}`);
     }
-    else add(relay.sessionInEra > planSession && era.force !== "ForceNone" ? "warn" : "na", "Planned era", "none");
+    else add(plannedNoneStatus(s, planSession, electionMs), "Planned era", "none");
 
     const lastSession = relay.sessionInEra >= era.sessionsPerEra - 1;
     if (lastSession && era.planned > era.active && relay.nextChanges !== era.planned) {
@@ -626,15 +647,107 @@ export function checks(s) {
     const last = s.rewards.rows.find((r) => r.era === era.active - 1);
     if (last) add(last.reward ? "ok" : "bad", `ErasValidatorReward ${last.era}`, last.reward ? "set" : "0");
   }
-  const pointsAge = (now - era.start) / 1000;
-  add(era.points.total ? "ok" : pointsAge > 1800 ? "warn" : "na", `ErasRewardPoints ${era.active}`, `${era.points.total}`);
+  // Points arrive with the session report at the end of the era's first session.
+  const pointsDue = relay.error ? undefined : era.start + relay.sessionMs + ERA_TOLERANCE;
+  add(era.points.total ? "ok" : pointsDue && now > pointsDue ? "warn" : "na", `ErasRewardPoints ${era.active}`, `${era.points.total}`);
+
+  const score = scoreCheck(el, lr);
+  if (score) add(...score);
 
   if (is.error) add("warn", "Issuance", is.error);
   else if (is.kind === "dap") {
     const age = (now - is.lastDrip) / 1000;
     add(age * 1000 <= is.cadence * 3 ? "ok" : "warn", "Dap.LastIssuanceTimestamp", `${fmtAge(age)} ago`);
-  }
+    add(...dapIssuanceCheck(is, s.token));
+  } else add(...legacyPayoutCheck(is, s.token));
   return out;
+}
+
+// No era planned. Problem once the election, started now, would end after the start of the era's
+// last session: the relay chain takes the next validator set at that session change.
+function plannedNoneStatus({ era, relay, at }, planSession, electionMs) {
+  if (era.force === "ForceNone") return "na";
+  const ahSession = era.lastReport + 1 - era.startSession;
+  if (ahSession < planSession) return "na";
+  const lastSessionStart = era.start + (era.sessionsPerEra - 1) * relay.sessionMs;
+  return electionMs !== undefined && at + electionMs > lastSessionStart ? "bad" : "warn";
+}
+
+// `ElectionScore::strict_better` with a zero threshold, as the verifier compares a solution with
+// MinimumScore: higher minimal_stake, then higher sum_stake, then lower sum_stake_squared.
+export function strictBetter(a, b) {
+  if (a.minimal_stake !== b.minimal_stake) return a.minimal_stake > b.minimal_stake;
+  if (a.sum_stake !== b.sum_stake) return a.sum_stake > b.sum_stake;
+  return a.sum_stake_squared < b.sum_stake_squared;
+}
+
+function scoreCheck(el, lr) {
+  const [round, queued, minimum] = !el.error && el.queued ? [el.round, el.queued, el.minimum]
+    : !lr.error && lr.queued ? [lr.round, lr.queued, lr.minimum] : [];
+  if (!queued) return undefined;
+  const label = `Round ${round} QueuedSolutionScore`;
+  if (!minimum) return ["na", label, "no MinimumScore"];
+  return strictBetter(queued, minimum) ? ["ok", label, "above MinimumScore"] : ["bad", label, "not above MinimumScore"];
+}
+
+const amount = (planck, token) => `${(Number(planck) / 10 ** token.decimals).toLocaleString("en-US", { maximumFractionDigits: 2 })} ${token.symbol}`;
+
+// ok within `tol` of `expected`, bad when zero or below half or above double, warn otherwise.
+export function compare(actual, expected, tol) {
+  if (actual <= 0 || actual < expected / 2 || actual > expected * 2) return "bad";
+  return Math.abs(actual - expected) <= tol ? "ok" : "warn";
+}
+
+const RANK = { bad: 3, warn: 2, ok: 1, na: 0 };
+export const worst = (list) => list.reduce((w, k) => (RANK[k.status] > RANK[w] ? k.status : w), "ok");
+
+// Last full era, between the era change blocks. Expected mint is the issuance rate over the drip
+// window (`LastIssuanceTimestamp` at both blocks). Tolerance is the mint of one IssuanceCadence.
+export function dapIssuanceCheck(is, token) {
+  const l = is.lastEra;
+  const label = `Era ${l.era} issuance`;
+  const ratePerMs = is.inflation
+    ? Number(is.inflation.next_mint[0]) / is.inflationEraMs
+    : is.curve
+    ? (Number(is.curve.fixedTotalIssuance) * Number(is.curve.percent)) / 100 / YEAR_MS
+    : undefined;
+  const minted = Number(l.tiDelta);
+  const share = (key) => Number(is.pots.find((p) => p.key === key)?.share ?? 0) / 1e9;
+  const tol = (ratePerMs ?? minted / l.dripMs) * is.cadence;
+  const parts = [];
+  if (ratePerMs !== undefined) parts.push({ name: "TotalIssuance change", actual: minted, expected: ratePerMs * l.dripMs, tol });
+  parts.push(
+    { name: "ErasValidatorReward", actual: Number(l.reward), expected: share("staker_rewards") * minted, tol: share("staker_rewards") * tol },
+    { name: "ErasValidatorIncentiveBudget", actual: Number(l.budget), expected: share("validator_incentive") * minted, tol: share("validator_incentive") * tol },
+  );
+  // Fees, dust, slashes and expired era pots only add to the buffer, signed rewards take from it.
+  const floor = share("buffer") * minted - Number(l.minerRewards ?? 0n);
+  const reserve = Number(l.reserveDelta);
+  const reserveStatus = reserve <= 0 || reserve < floor / 2 ? "bad" : reserve < floor - share("buffer") * tol || reserve > 2 * share("buffer") * minted ? "warn" : "ok";
+  const statuses = parts.map((p) => ({ ...p, status: compare(p.actual, p.expected, p.tol) }));
+  statuses.push({ name: "DAP buffer and staging change", actual: reserve, expected: floor, status: reserveStatus });
+  const value = statuses
+    .map((p) => `${p.name} ${amount(p.actual, token)}${p.status === "ok" ? "" : ` (expected ${p.name.startsWith("DAP") ? "at least " : ""}${amount(p.expected, token)})`}`)
+    .join(", ");
+  return [worst(statuses), label, ratePerMs === undefined ? `${value}, no expected issuance rate` : value];
+}
+
+// Inflation API next_mint, scaled to the era length (capped by MaxEraDuration) and to the
+// TotalIssuance before the era change. The validator_payout share also moves with ErasTotalStake.
+export function legacyPayoutCheck(is, token) {
+  const l = is.lastEra;
+  const label = `Era ${l.era} EraPaid`;
+  if (!l.paid || !is.inflation) return ["warn", label, !l.paid ? "no EraPaid event" : "no Inflation API"];
+  const ms = is.maxEraDuration ? Math.min(l.ms, is.maxEraDuration) : l.ms;
+  const scale = (ms / is.inflationEraMs) * (Number(l.tiBefore) / Number(is.totalIssuance));
+  const [stakers, rest] = is.inflation.next_mint.map((v) => Number(v) * scale);
+  const tol = stakers * Math.abs(Number(is.totalStake) - Number(l.stakePrev)) / Number(l.stakePrev);
+  const parts = [
+    { name: "validator_payout", actual: Number(l.paid.validator_payout), expected: stakers },
+    { name: "remainder", actual: Number(l.paid.remainder), expected: rest },
+  ].map((p) => ({ ...p, status: compare(p.actual, p.expected, tol + 1) }));
+  const value = parts.map((p) => `${p.name} ${amount(p.actual, token)}${p.status === "ok" ? "" : ` (expected ${amount(p.expected, token)})`}`).join(", ");
+  return [worst(parts), label, value];
 }
 
 // Where the validator set of the planned era is, from election to the relay chain.
@@ -650,9 +763,6 @@ export function nextSetStage({ era, relay, election }) {
 }
 
 export const phaseText = (p) => (p.value === undefined ? p.type : `${p.type}(${p.value})`);
-
-const RANK = { bad: 3, warn: 2, ok: 1, na: 0 };
-export const worst = (list) => list.reduce((w, k) => (RANK[k.status] > RANK[w] ? k.status : w), "ok");
 
 export function fmtAge(s) {
   if (s < 90) return `${Math.max(0, Math.round(s))} s`;

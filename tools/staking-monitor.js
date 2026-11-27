@@ -558,20 +558,19 @@ export class Monitor {
     const ah = this.ah;
     const change = await this.readEraChange(era.active, era.start);
     const paid = change.events.find((e) => e.name === "EraPaid");
-    const [inflation, maxEraDuration, maxStaked, reward, tiBefore, stakePrev] = await Promise.all([
+    const [inflation, maxEraDuration, maxStaked, reward, tiBefore] = await Promise.all([
       ah.has("api:Inflation") ? ah.api.apis.Inflation.experimental_issuance_prediction_info({ at: ah.best.hash }) : undefined,
       ah.constant("Staking.MaxEraDuration"), ah.q("Staking.MaxStakedRewards"), ah.q("Staking.ErasValidatorReward", change.prev.index),
-      ah.qAt(change.n - 1, "Balances.TotalIssuance"), ah.q("Staking.ErasTotalStake", change.prev.index),
+      ah.qAt(change.n - 1, "Balances.TotalIssuance"),
     ]);
     return {
       kind: "legacy",
       inflation,
       maxEraDuration: Number(maxEraDuration),
       maxStaked,
-      lastEra: { era: change.prev.index, ms: era.start - change.prev.start, paid: paid?.value, reward, tiBefore, stakePrev },
+      lastEra: { era: change.prev.index, ms: era.start - change.prev.start, paid: paid?.value, reward, tiBefore },
       inflationEraMs: this.network.inflationEraMs,
       totalIssuance: era.totalIssuance,
-      totalStake: era.totalStake,
     };
   }
 }
@@ -658,8 +657,8 @@ export function checks(s) {
   else if (is.kind === "dap") {
     const age = (now - is.lastDrip) / 1000;
     add(age * 1000 <= is.cadence * 3 ? "ok" : "warn", "Dap.LastIssuanceTimestamp", `${fmtAge(age)} ago`);
-    add(...dapIssuanceCheck(is, s.token));
-  } else add(...legacyPayoutCheck(is, s.token));
+    dapIssuanceCheck(is, s.token).forEach((c) => add(...c));
+  } else legacyPayoutCheck(is, s.token).forEach((c) => add(...c));
   return out;
 }
 
@@ -705,7 +704,6 @@ export const worst = (list) => list.reduce((w, k) => (RANK[k.status] > RANK[w] ?
 // window (`LastIssuanceTimestamp` at both blocks). Tolerance is the mint of one IssuanceCadence.
 export function dapIssuanceCheck(is, token) {
   const l = is.lastEra;
-  const label = `Era ${l.era} issuance`;
   const ratePerMs = is.inflation
     ? Number(is.inflation.next_mint[0]) / is.inflationEraMs
     : is.curve
@@ -725,29 +723,31 @@ export function dapIssuanceCheck(is, token) {
   const reserve = Number(l.reserveDelta);
   const reserveStatus = reserve <= 0 || reserve < floor / 2 ? "bad" : reserve < floor - share("buffer") * tol || reserve > 2 * share("buffer") * minted ? "warn" : "ok";
   const statuses = parts.map((p) => ({ ...p, status: compare(p.actual, p.expected, p.tol) }));
-  statuses.push({ name: "DAP buffer and staging change", actual: reserve, expected: floor, status: reserveStatus });
-  const value = statuses
-    .map((p) => `${p.name} ${amount(p.actual, token)}${p.status === "ok" ? "" : ` (expected ${p.name.startsWith("DAP") ? "at least " : ""}${amount(p.expected, token)})`}`)
-    .join(", ");
-  return [worst(statuses), label, ratePerMs === undefined ? `${value}, no expected issuance rate` : value];
+  statuses.push({ name: "DAP buffer and staging change", actual: reserve, expected: floor, atLeast: true, status: reserveStatus });
+  const rate = ratePerMs === undefined ? "" : ` = ${(ratePerMs * 1000 / 10 ** token.decimals).toLocaleString("en-US", { maximumFractionDigits: 4 })} ${token.symbol}/s × ${Math.round(l.dripMs / 1000)} s`;
+  const rows = statuses.map((p) => [
+    p.status,
+    `Era ${l.era} ${p.name}`,
+    `${amount(p.actual, token)} (expected ${p.atLeast ? "at least " : ""}${amount(p.expected, token)}${p.name === "TotalIssuance change" ? rate : ""})`,
+  ]);
+  if (ratePerMs === undefined) rows.unshift(["warn", `Era ${l.era} TotalIssuance change`, `${amount(minted, token)} (no expected issuance rate)`]);
+  return rows;
 }
 
-// Inflation API next_mint, scaled to the era length (capped by MaxEraDuration) and to the
-// TotalIssuance before the era change. The validator_payout share also moves with ErasTotalStake.
+// Inflation API next_mint total, scaled to the era length (capped by MaxEraDuration) and to the
+// TotalIssuance before the era change. The total is linear in both. The validator_payout and
+// remainder split also depends on ErasTotalStake, so only the total is checked.
 export function legacyPayoutCheck(is, token) {
   const l = is.lastEra;
-  const label = `Era ${l.era} EraPaid`;
-  if (!l.paid || !is.inflation) return ["warn", label, !l.paid ? "no EraPaid event" : "no Inflation API"];
+  const label = `Era ${l.era} EraPaid validator_payout + remainder`;
+  if (!l.paid || !is.inflation) return [["warn", label, !l.paid ? "no EraPaid event" : "no Inflation API"]];
   const ms = is.maxEraDuration ? Math.min(l.ms, is.maxEraDuration) : l.ms;
   const scale = (ms / is.inflationEraMs) * (Number(l.tiBefore) / Number(is.totalIssuance));
-  const [stakers, rest] = is.inflation.next_mint.map((v) => Number(v) * scale);
-  const tol = stakers * Math.abs(Number(is.totalStake) - Number(l.stakePrev)) / Number(l.stakePrev);
-  const parts = [
-    { name: "validator_payout", actual: Number(l.paid.validator_payout), expected: stakers },
-    { name: "remainder", actual: Number(l.paid.remainder), expected: rest },
-  ].map((p) => ({ ...p, status: compare(p.actual, p.expected, tol + 1) }));
-  const value = parts.map((p) => `${p.name} ${amount(p.actual, token)}${p.status === "ok" ? "" : ` (expected ${amount(p.expected, token)})`}`).join(", ");
-  return [worst(parts), label, value];
+  const expected = Number(is.inflation.next_mint[0] + is.inflation.next_mint[1]) * scale;
+  const actual = Number(l.paid.validator_payout + l.paid.remainder);
+  // Float and Perquintill rounding only.
+  const status = compare(actual, expected, expected * 1e-9);
+  return [[status, label, `${amount(actual, token)} (expected ${amount(expected, token)})`]];
 }
 
 // Where the validator set of the planned era is, from election to the relay chain.

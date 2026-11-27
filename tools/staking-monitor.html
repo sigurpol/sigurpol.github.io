@@ -1,0 +1,476 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Staking Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=Unbounded:wght@500;600&display=swap">
+<script type="importmap">
+{
+  "imports": {
+    "polkadot-api": "https://esm.sh/polkadot-api@3.3.0?bundle&deps=rxjs@7.8.2,@noble/hashes@2.4.0,@scure/base@2.4.0,scale-ts@1.6.1,@rx-state/core@0.1.4",
+    "polkadot-api/ws": "https://esm.sh/polkadot-api@3.3.0/ws?bundle&deps=rxjs@7.8.2,@noble/hashes@2.4.0,@scure/base@2.4.0,scale-ts@1.6.1,@rx-state/core@0.1.4",
+    "@polkadot-api/substrate-bindings": "https://esm.sh/@polkadot-api/substrate-bindings@0.21.2?bundle&deps=rxjs@7.8.2,@noble/hashes@2.4.0,@scure/base@2.4.0,scale-ts@1.6.1,@rx-state/core@0.1.4"
+  }
+}
+</script>
+<style>
+:root {
+  --bg: #f7f6f8; --surface: #ffffff; --fg: #1c1a22; --muted: #6a6574; --line: #e3e0e8;
+  --accent: #d6006f; --accent-soft: #fbe3ef;
+  --good: #1f7a4d; --warn: #b7791f; --bad: #b3261e; --na: #9a94a3;
+  --font-display: "Unbounded", "IBM Plex Sans", system-ui, sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141218; --surface: #1d1a22; --fg: #ece9f1; --muted: #a29bad; --line: #322e3a;
+    --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --warn: #e3b04b; --bad: #ff8a80; --na: #6f6878;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141218; --surface: #1d1a22; --fg: #ece9f1; --muted: #a29bad; --line: #322e3a;
+  --accent: #ff4fa3; --accent-soft: #3a1a2b; --good: #5cc98f; --warn: #e3b04b; --bad: #ff8a80; --na: #6f6878;
+  color-scheme: dark;
+}
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 14px; line-height: 1.5; }
+.wrap { max-width: 1280px; margin: 0 auto; padding: 24px 16px 48px; display: grid; gap: 20px; }
+header { display: grid; gap: 6px; }
+h1 { font-family: var(--font-display); font-weight: 600; font-size: 1.5rem; margin: 0; text-wrap: balance; }
+h2 { font-family: var(--font-display); font-weight: 500; font-size: 0.95rem; margin: 0; letter-spacing: 0.01em; }
+h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 500; margin: 0; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 14px; min-width: 0; align-content: start; }
+.panel:empty { display: none; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 12.5px; padding: 5px 12px; border: 0; background: transparent; color: var(--fg); cursor: pointer; }
+.seg button[aria-pressed=true] { background: var(--accent); color: var(--surface); }
+.btn { font: inherit; font-size: 12.5px; font-weight: 500; padding: 5px 14px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent-soft); color: var(--accent); cursor: pointer; }
+.btn:hover:not(:disabled) { background: var(--accent); color: var(--surface); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.controls label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.controls input { accent-color: var(--accent); margin: 0; }
+select { font-family: var(--font-data); font-size: 12.5px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); color: var(--fg); }
+input:focus-visible, select:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.status { font-size: 12.5px; color: var(--muted); }
+.status.err { color: var(--bad); }
+.cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.cols.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 1080px) { .cols, .cols.two { grid-template-columns: minmax(0, 1fr); } }
+.pill { font-size: 11.5px; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--surface); background: var(--st); }
+.panel-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.checks { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 4px 20px; font-size: 12.5px; }
+.checks li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 8px; align-items: baseline; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--st); display: inline-block; }
+.ok { --st: var(--good); } .warn { --st: var(--warn); } .bad { --st: var(--bad); } .na { --st: var(--na); }
+.checks .val { font-family: var(--font-data); font-size: 12px; font-weight: 500; }
+dl { display: grid; grid-template-columns: fit-content(55%) minmax(0, 1fr); gap: 3px 12px; margin: 0; font-size: 12.5px; }
+dt { color: var(--muted); overflow-wrap: anywhere; }
+dd { margin: 0; font-family: var(--font-data); text-align: right; overflow-wrap: anywhere; }
+dd small, td small { color: var(--muted); font-size: 11px; }
+td small { display: block; }
+.section { display: grid; gap: 6px; }
+.tag { font-family: var(--font-data); font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.table-wrap { overflow-x: auto; scrollbar-color: var(--line) transparent; }
+table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+th, td { padding: 5px 6px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 500; white-space: nowrap; }
+td { font-family: var(--font-data); font-size: 12px; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+.evs { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-family: var(--font-data); font-size: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.stat { display: grid; gap: 2px; }
+.stat b { font-family: var(--font-data); font-size: 1.15rem; font-weight: 500; }
+.stat span { font-size: 12px; color: var(--muted); }
+a.addr { font-family: var(--font-data); font-size: 11.5px; color: var(--accent); text-decoration: none; overflow-wrap: anywhere; }
+a.addr:hover { text-decoration: underline; }
+.err-text { color: var(--bad); font-size: 12.5px; overflow-wrap: anywhere; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Staking Monitor</h1>
+  </header>
+
+  <div class="controls">
+    <div class="seg" id="network" role="group" aria-label="Network">
+      <button type="button" data-net="polkadot">Polkadot</button>
+      <button type="button" data-net="kusama">Kusama</button>
+      <button type="button" data-net="westend">Westend</button>
+    </div>
+    <button type="button" class="btn" id="refresh">Refresh now</button>
+    <label><input type="checkbox" id="auto"> Auto-refresh</label>
+    <select id="interval" aria-label="Refresh interval">
+      <option value="15">15 s</option>
+      <option value="30" selected>30 s</option>
+      <option value="60">1 min</option>
+      <option value="300">5 min</option>
+    </select>
+    <label>Eras
+      <select id="eras"><option>4</option><option>8</option><option>16</option></select>
+    </label>
+    <span class="status" id="status">Connecting…</span>
+  </div>
+
+  <section class="panel" id="checks"></section>
+
+  <div class="cols">
+    <section class="panel" id="era"></section>
+    <section class="panel" id="planned"></section>
+    <section class="panel" id="relay"></section>
+  </div>
+
+  <div class="cols two">
+    <section class="panel" id="election"></section>
+    <section class="panel" id="last-round"></section>
+  </div>
+
+  <section class="panel" id="rewards"></section>
+
+  <section class="panel" id="issuance"></section>
+</div>
+
+<script type="module">
+// Bump the version whenever the JS changes, so browsers don't pair new HTML with a cached old JS.
+import { Monitor, NETWORKS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=1";
+
+const $ = (id) => document.getElementById(id);
+const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const num = (v) => (v === undefined || v === null ? "–" : Number(v).toLocaleString("en-US"));
+const pct = (v, digits = 1) => (Number.isFinite(v) ? `${(100 * v).toFixed(digits)}%` : "–");
+const ago = (ms) => (ms ? `${fmtAge((Date.now() - ms) / 1000)} ago` : "–");
+const time = (ms) => (ms ? new Date(ms).toLocaleString("en-GB", { dateStyle: "short", timeStyle: "short" }) : "–");
+const dur = (ms) => (ms === undefined ? "–" : fmtAge(ms / 1000));
+const perbill = (p) => pct(Number(p) / 1e9);
+const STATUS = { ok: "OK", warn: "Check", bad: "Problem", na: "OK" };
+
+let netKey = new URLSearchParams(location.search).get("network") in NETWORKS
+  ? new URLSearchParams(location.search).get("network") : "polkadot";
+let monitor = null;
+let generation = 0;
+let busy = false;
+let timer = null;
+let token = { decimals: 10, symbol: "" };
+
+const units = (planck) => (planck === undefined || planck === null ? undefined : Number(planck) / 10 ** token.decimals);
+const tok = (planck, digits = 2) => {
+  const v = units(planck);
+  return v === undefined ? "–" : `${v.toLocaleString("en-US", { maximumFractionDigits: digits })} ${esc(token.symbol)}`;
+};
+const addr = (a) => `<a class="addr" href="${NETWORKS[netKey].subscan}/account/${esc(a)}" target="_blank" rel="noopener">${esc(a)}</a>`;
+const block = (n) => (n === undefined ? "–" : `<a class="addr" href="${NETWORKS[netKey].subscan}/block/${n}" target="_blank" rel="noopener">#${num(n)}</a>`);
+const score = (s) => (s ? `${tok(s.minimal_stake, 0)}<small> min, ${tok(s.sum_stake, 0)} sum</small>` : "none");
+const dl = (rows) => `<dl>${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("")}</dl>`;
+const head = (title, tag) => `<div><h2>${title}</h2>${tag ? `<span class="tag">${esc(tag)}</span>` : ""}</div>`;
+const failed = (id, title, e) => ($(id).innerHTML = `<h2>${title}</h2><p class="err-text">${esc(e)}</p>`);
+const json = (v) => JSON.stringify(v, (_, x) => (typeof x === "bigint" ? x.toString() : x));
+
+function renderChecks(snap) {
+  const st = worst(snap.checks);
+  $("checks").innerHTML = `<div class="panel-head"><h2>Checks</h2><span class="pill ${st}">${STATUS[st]}</span></div>
+    <ul class="checks">${snap.checks.map((k) => `<li class="${k.status}"><span class="dot"></span>
+      <span>${esc(k.label)}: <b class="val">${esc(k.value)}</b></span></li>`).join("")}</ul>`;
+}
+
+function renderEra(snap) {
+  const { era: e, relay: r, change: c } = snap;
+  const expected = r.error ? undefined : e.sessionsPerEra * r.sessionMs;
+  const rows = [
+    ["ActiveEra", esc(e.active)],
+    ["Start", `${time(e.start)} <small>${ago(e.start)}</small>`],
+    ["Session", r.error ? "–" : `${r.sessionInEra + 1} of ${e.sessionsPerEra} <small>(${r.session}, slot ${num(r.slotInSession)} of ${num(r.sessionSlots)})</small>`],
+    ["Expected end", expected ? `${time(e.start + expected)} <small>era length ${dur(expected)}</small>` : "–"],
+    c.error ? ["Era change", esc(c.error)] : [`Era ${c.prev.index} length`, `${dur(e.start - c.prev.start)}`],
+    ["ForceEra", esc(e.force)],
+    ["ErasRewardPoints", `${num(e.points.total)} <small>${num(e.points.count)} validators</small>`],
+    ["ErasStakersOverview", `${num(e.elected)} <small>ValidatorCount ${num(e.validatorCount)}</small>`],
+    ["ErasTotalStake", tok(e.totalStake, 0)],
+    ["Validators self-stake", tok(e.ownStake, 0)],
+    ["CounterForValidators", num(e.counters.validators)],
+    ["CounterForNominators", num(e.counters.nominators)],
+    ["MinimumActiveStake", tok(e.minActive)],
+    ["MinNominatorBond", tok(e.minNom)],
+    ["MinValidatorBond", tok(e.minVal)],
+  ];
+  $("era").innerHTML = `${head("Active era", NETWORKS[netKey].ah.url)}${dl(rows)}`;
+}
+
+function eventText(ev) {
+  const v = ev.value;
+  switch (ev.name) {
+    case "EraPaid": return `era ${v.era_index}, validator_payout ${tok(v.validator_payout)}, remainder ${tok(v.remainder)}`;
+    case "SessionRotated": return `starting_session ${v.starting_session}, active_era ${v.active_era}, planned_era ${v.planned_era}`;
+    case "SessionReportReceived": return `end_index ${v.end_index}${v.activation_timestamp ? `, activation era ${v.activation_timestamp[1]}` : ""}`;
+    default: return esc(json(v));
+  }
+}
+
+function renderPlanned(snap) {
+  const { era: e, change: c } = snap;
+  const planned = e.planned > e.active;
+  const rows = [
+    ["CurrentEra", esc(e.planned)],
+    ["Validator set", planned ? esc(nextSetStage(snap)) : "not planned"],
+    ["Staking.NextElectionPage", e.nextElectionPage === undefined ? "none" : num(e.nextElectionPage)],
+    ["StakingRcClient.OutgoingValidatorSet", e.outgoing ? `id ${e.outgoing.id}, ${num(e.outgoing.count)} validators <small>${e.outgoing.retries} retries left</small>` : "none"],
+    ["LastSessionReportEndingIndex", esc(e.lastReport)],
+    ["PlanningEraOffset", num(e.planningOffset)],
+  ];
+  const evs = c.error ? `<p class="err-text">${esc(c.error)}</p>`
+    : `<ul class="evs">${c.events.map((ev) => `<li>${esc(ev.pallet)}.${esc(ev.name)} <span class="tag">${eventText(ev)}</span></li>`).join("")}</ul>`;
+  $("planned").innerHTML = `${head("Planned era")}${dl(rows)}
+    <div class="section"><h3>Era ${c.era ?? e.active} start ${c.n ? block(c.n) : ""}</h3>${evs}</div>`;
+}
+
+function renderRelay(snap) {
+  const r = snap.relay;
+  if (r.error) return failed("relay", "Relay chain", r.error);
+  const rows = [
+    ["Best block", `#${num(r.best)} <small>${ago(r.bestTs)}</small>`],
+    ["Session.CurrentIndex", esc(r.session)],
+    ["Session length", dur(r.sessionMs)],
+    ["Session.Validators", num(r.validators)],
+    ["StakingAhClient.Mode", esc(r.mode)],
+    ["StakingAhClient.ValidatorSet", r.set ? `id ${r.set.id}, ${num(r.set.count)} validators` : "none"],
+    ["NextSessionChangesValidators", r.nextChanges === undefined ? "none" : esc(r.nextChanges)],
+    ["ValidatorSetAppliedAt", esc(r.appliedAt)],
+  ];
+  $("relay").innerHTML = `${head("Relay chain", NETWORKS[netKey].relay.url)}${dl(rows)}`;
+}
+
+function submissionsTable(list, withOutcome) {
+  if (!list.length) return `<p class="tag">No signed submissions.</p>`;
+  const outcome = (o) => (!o ? "not verified" : `${esc(o.name)} ${tok(o.amount)}<small>${block(o.n)}</small>`);
+  return `<div class="table-wrap"><table><thead><tr><th>Submitter</th><th class="num">minimal_stake</th><th class="num">sum_stake</th><th class="num">Pages</th>${withOutcome ? "<th>Outcome</th>" : ""}</tr></thead><tbody>
+    ${list.map((s) => `<tr><td>${addr(s.who)}</td><td class="num">${tok(s.score.minimal_stake, 0)}</td><td class="num">${tok(s.score.sum_stake, 0)}</td><td class="num">${num(s.pagesIn)}</td>${withOutcome ? `<td>${outcome(s.outcome)}</td>` : ""}</tr>`).join("")}
+    </tbody></table></div>`;
+}
+
+function renderElection(snap) {
+  const el = snap.election;
+  if (el.error) return failed("election", "Election", el.error);
+  const k = el.config;
+  const left = typeof el.phase.value === "number" && el.phase.type !== "Snapshot" && el.phase.type !== "Export"
+    ? ` <small>~${dur(el.phase.value * el.msPerBlock)} left</small>` : "";
+  const rows = [
+    ["CurrentPhase", `${esc(phaseText(el.phase))}${left}`],
+    ["DesiredTargets", num(el.desired)],
+    ["Voter snapshot pages", `${num(el.voterPages)} of ${num(k.pages)}`],
+    ["Target snapshot", num(el.targets)],
+    ["Verifier StatusStorage", esc(el.status)],
+    ["QueuedSolutionScore", score(el.queued)],
+    ["MinimumScore", score(el.minimum)],
+    ["Invulnerables", el.invulnerables.length ? el.invulnerables.map(addr).join("<br>") : "none"],
+    ["UnpaidRewards", num(el.unpaid.length)],
+    ["Pages", num(k.pages)],
+    ["SignedPhase", `${num(k.signed)} blocks`],
+    ["SignedValidationPhase", `${num(k.signedValidation)} blocks`],
+    ["UnsignedPhase", `${num(k.unsigned)} blocks`],
+    ["Block time", `${(el.msPerBlock / 1000).toFixed(2)} s`],
+  ];
+  $("election").innerHTML = `${head(`Election round ${el.round}`)}${dl(rows)}
+    <div class="section"><h3>Signed submissions</h3>${submissionsTable(el.submissions, false)}</div>`;
+}
+
+function renderLastRound(snap) {
+  const lr = snap.lastRound;
+  if (lr.error) return failed("last-round", "Last election round", lr.error);
+  const phases = Object.keys(lr.blocks);
+  const timeline = phases.map((p, i) => {
+    const next = phases[i + 1];
+    const length = next ? `${num(lr.blocks[next] - lr.blocks[p])} blocks, ${dur(lr.stamps[next] - lr.stamps[p])}` : "";
+    return `<tr><td>${p}</td><td>${block(lr.blocks[p])}</td><td>${time(lr.stamps[p])}</td><td class="num">${length}</td></tr>`;
+  }).join("");
+  const margin = lr.queued && lr.minimum ? units(lr.queued.minimal_stake) / units(lr.minimum.minimal_stake) : undefined;
+  const rows = [
+    ["Solution", lr.source === "none" ? "none queued" : `${lr.source}, Queued at ${block(lr.queuedAt)}`],
+    ["QueuedSolutionScore", score(lr.queued)],
+    ["MinimumScore", score(lr.minimum)],
+    ["minimal_stake / MinimumScore", margin ? `${margin.toFixed(2)}x` : "–"],
+    ["DesiredTargets", num(lr.desired)],
+    ["Rejected submissions", num(lr.rejected)],
+  ];
+  const evs = lr.events.length
+    ? `<ul class="evs">${lr.events.map((e) => `<li>${block(e.n)} ${esc(e.pallet)}.${esc(e.name)}</li>`).join("")}</ul>` : "";
+  $("last-round").innerHTML = `${head(`Election round ${lr.round}`)}${dl(rows)}
+    <div class="section"><h3>Phases</h3><div class="table-wrap"><table><thead><tr><th>Phase</th><th>From</th><th>Time</th><th class="num">Length</th></tr></thead><tbody>${timeline}</tbody></table></div></div>
+    <div class="section"><h3>Signed submissions</h3>${submissionsTable(lr.submissions, true)}</div>
+    ${evs ? `<div class="section"><h3>Events</h3>${evs}</div>` : ""}`;
+}
+
+function renderRewards(snap) {
+  const rw = snap.rewards;
+  if (rw.error) return failed("rewards", "Era rewards", rw.error);
+  const dap = snap.era.disableMinting;
+  const rows = rw.rows.map((r) => `<tr><td>${r.era}${r.era === rw.oldest ? "<small>oldest claimable</small>" : ""}</td>
+    <td class="num">${num(r.sessions)}</td>
+    <td class="num">${num(r.points)}</td>
+    <td class="num">${tok(r.reward, 0)}</td>
+    ${dap ? `<td class="num">${tok(r.budget, 0)}</td>` : ""}
+    <td class="num">${tok(r.stake, 0)}</td>
+    <td class="num">${num(r.validators)}</td>
+    <td class="num">${num(r.unclaimed)} <small>of ${num(r.pages)}</small></td>
+    ${dap ? `<td class="num">${tok(r.pot, 0)}</td>` : ""}</tr>`).join("");
+  $("rewards").innerHTML = `${head("Era rewards")}
+    <div class="table-wrap"><table><thead><tr><th>Era</th><th class="num">Sessions</th><th class="num">ErasRewardPoints</th>
+    <th class="num">ErasValidatorReward</th>${dap ? `<th class="num">ErasValidatorIncentiveBudget</th>` : ""}
+    <th class="num">ErasTotalStake</th><th class="num">Validators</th><th class="num">Unclaimed pages</th>
+    ${dap ? `<th class="num">Era pot balance</th>` : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function inflationRows(inf, snap) {
+  if (!inf) return [];
+  const eraLabel = snap.relay.error ? "era" : dur(snap.era.sessionsPerEra * snap.relay.sessionMs);
+  const [stakers, rest] = inf.next_mint;
+  return [
+    ["Inflation API issuance", `${pct(Number(inf.issuance) / 1e18, 3)} <small>per year</small>`],
+    [`Inflation API next_mint (${eraLabel})`, rest ? `${tok(stakers, 0)} <small>stakers</small><br>${tok(rest, 0)} <small>remainder</small>` : tok(stakers, 0)],
+  ];
+}
+
+function renderDap(snap, is) {
+  const e = snap.era;
+  const ti = units(is.totalIssuance);
+  const stat = (v, label) => `<div class="stat"><b>${v}</b><span>${label}</span></div>`;
+  const stats = [
+    stat(tok(is.totalIssuance, 0), "Balances.TotalIssuance"),
+    stat(tok(is.inactive, 0), "Balances.InactiveIssuance"),
+    ...(is.cap ? [stat(pct(ti / units(is.cap), 2), `of ${tok(is.cap, 0)} cap`), stat(tok(is.cap - is.totalIssuance, 0), "Remaining to cap")] : []),
+  ].join("");
+  const allocation = `<div class="table-wrap"><table><thead><tr><th>BudgetAllocation</th><th class="num">Share</th><th>Account</th><th class="num">Balance</th></tr></thead><tbody>
+    ${is.pots.map((p) => `<tr><td>${esc(p.key)}</td><td class="num">${perbill(p.share)}</td><td>${addr(p.account)}</td><td class="num">${tok(p.balance, 0)}</td></tr>`).join("")}
+    <tr><td>staging</td><td class="num">–</td><td>${addr(is.staging)}</td><td class="num">${tok(is.stagingBalance, 0)}</td></tr>
+    </tbody></table></div>`;
+  const l = is.lastEra;
+  const tiDelta = units(l.tiDelta);
+  const share = (v) => `${tok(v, 0)} <small>${pct(units(v) / tiDelta)}</small>`;
+  const last = dl([
+    ["Blocks", `${block(l.from)} to ${block(l.to)} <small>${dur(l.ms)}</small>`],
+    ["TotalIssuance change", tok(l.tiDelta, 0)],
+    ["ErasValidatorReward", share(l.reward)],
+    ["ErasValidatorIncentiveBudget", share(l.budget)],
+    ["DAP buffer and staging change", share(l.reserveDelta)],
+  ]);
+  const general = (key) => is.pots.find((p) => p.key === key);
+  const accrued = (key) => (general(key) ? general(key).balance - is.ed : undefined);
+  const current = dl([
+    ["Elapsed", dur(is.thisEra.elapsed)],
+    ["staker_rewards pot", tok(accrued("staker_rewards"), 0)],
+    ["validator_incentive pot", tok(accrued("validator_incentive"), 0)],
+    ["DAP buffer and staging change", tok(is.thisEra.reserveDelta, 0)],
+  ]);
+  const config = dl([
+    ["Dap.LastIssuanceTimestamp", `${time(is.lastDrip)} <small>${ago(is.lastDrip)}</small>`],
+    ["IssuanceCadence", dur(is.cadence)],
+    ["MaxElapsedPerDrip", dur(is.maxElapsed)],
+    ["Staking.DisableMinting", String(e.disableMinting)],
+    ...inflationRows(is.inflation, snap),
+  ]);
+  $("issuance").innerHTML = `${head("Issuance and DAP")}<div class="stats">${stats}</div>
+    <div class="cols"><div class="section"><h3>Era ${l.era}</h3>${last}</div>
+    <div class="section"><h3>Era ${e.active} so far</h3>${current}</div>
+    <div class="section"><h3>Configuration</h3>${config}</div></div>
+    <div class="section"><h3>Accounts</h3>${allocation}</div>`;
+}
+
+function renderLegacy(snap, is) {
+  const e = snap.era;
+  const l = is.lastEra;
+  const ratio = units(e.totalStake) / units(is.totalIssuance);
+  const rows = [
+    ["Staking.DisableMinting", String(e.disableMinting)],
+    ["Balances.TotalIssuance", tok(is.totalIssuance, 0)],
+    [`ErasTotalStake ${e.active} / TotalIssuance`, pct(ratio)],
+    ...inflationRows(is.inflation, snap),
+    ["MaxEraDuration", dur(is.maxEraDuration)],
+    ["MaxStakedRewards", is.maxStaked === undefined ? "none" : `${is.maxStaked}%`],
+  ];
+  const last = l.paid
+    ? dl([
+        ["Length", dur(l.ms)],
+        ["EraPaid validator_payout", tok(l.paid.validator_payout, 0)],
+        ["EraPaid remainder", tok(l.paid.remainder, 0)],
+        ["ErasValidatorReward", tok(l.reward, 0)],
+      ])
+    : `<p class="tag">No EraPaid event at the era start block.</p>`;
+  $("issuance").innerHTML = `${head("Era payout")}<div class="cols two">
+    <div class="section"><h3>Configuration</h3>${dl(rows)}</div>
+    <div class="section"><h3>Era ${l.era}</h3>${last}</div></div>`;
+}
+
+function render(snap) {
+  token = snap.token;
+  renderChecks(snap);
+  renderEra(snap);
+  renderPlanned(snap);
+  renderRelay(snap);
+  renderElection(snap);
+  renderLastRound(snap);
+  renderRewards(snap);
+  const is = snap.issuance;
+  if (is.error) failed("issuance", "Issuance", is.error);
+  else if (is.kind === "dap") renderDap(snap, is);
+  else renderLegacy(snap, is);
+}
+
+async function refresh() {
+  if (busy || !monitor) return;
+  busy = true;
+  clearTimeout(timer);
+  const gen = generation;
+  $("refresh").disabled = true;
+  $("status").className = "status";
+  $("status").textContent = "Refreshing…";
+  const t0 = performance.now();
+  try {
+    const snap = await monitor.refresh({ eras: Number($("eras").value) });
+    if (gen !== generation) return;
+    render(snap);
+    $("status").textContent = `Updated ${new Date(snap.at).toLocaleTimeString()} in ${((performance.now() - t0) / 1000).toFixed(1)} s`;
+    window.dispatchEvent(new CustomEvent("monitor:refreshed", { detail: snap }));
+  } catch (e) {
+    if (gen !== generation) return;
+    $("status").className = "status err";
+    $("status").textContent = `Refresh failed: ${e?.message ?? e}`;
+  } finally {
+    if (gen === generation) {
+      busy = false;
+      $("refresh").disabled = false;
+      schedule();
+    }
+  }
+}
+
+function schedule() {
+  clearTimeout(timer);
+  if ($("auto").checked) timer = setTimeout(refresh, Number($("interval").value) * 1000);
+}
+
+function selectNetwork(key) {
+  netKey = key;
+  generation++;
+  busy = false;
+  clearTimeout(timer);
+  monitor?.destroy();
+  monitor = new Monitor(key);
+  document.querySelectorAll("#network button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.net === key)));
+  const url = new URL(location.href);
+  url.searchParams.set("network", key);
+  history.replaceState(null, "", url);
+  for (const id of ["checks", "era", "planned", "relay", "election", "last-round", "rewards", "issuance"]) $(id).innerHTML = "";
+  refresh();
+}
+
+document.querySelectorAll("#network button").forEach((b) => b.addEventListener("click", () => b.dataset.net !== netKey && selectNetwork(b.dataset.net)));
+$("refresh").addEventListener("click", refresh);
+$("auto").addEventListener("change", schedule);
+$("interval").addEventListener("change", schedule);
+$("eras").addEventListener("change", refresh);
+selectNetwork(netKey);
+</script>
+</body>
+</html>

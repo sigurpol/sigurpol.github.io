@@ -136,7 +136,7 @@ a.addr:hover { text-decoration: underline; }
 
 <script type="module">
 // Bump the version whenever the JS changes, so browsers don't pair new HTML with a cached old JS.
-import { Monitor, NETWORKS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=3";
+import { Monitor, NETWORKS, fmtAge, nextSetStage, phaseText, worst } from "./staking-monitor.js?v=4";
 
 const $ = (id) => document.getElementById(id);
 const esc = (v) => String(v ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
@@ -350,10 +350,10 @@ function renderDap(snap, is) {
   const share = (v) => `${tok(v, 0)} <small>${pct(units(v) / tiDelta)}</small>`;
   const last = dl([
     ["Blocks", `${block(l.from)} to ${block(l.to)} <small>${dur(l.ms)}</small>`],
-    ["TotalIssuance change", tok(l.tiDelta, 0)],
+    ["TotalIssuance increase", tok(l.tiDelta, 0)],
     ["ErasValidatorReward", share(l.reward)],
     ["ErasValidatorIncentiveBudget", share(l.budget)],
-    ["DAP buffer and staging change", share(l.reserveDelta)],
+    ["DAP buffer inflow (buffer + staging)", share(l.reserveDelta)],
   ]);
   const general = (key) => is.pots.find((p) => p.key === key);
   const accrued = (key) => (general(key) ? general(key).balance - is.ed : undefined);
@@ -361,7 +361,7 @@ function renderDap(snap, is) {
     ["Elapsed", dur(is.thisEra.elapsed)],
     ["staker_rewards pot", tok(accrued("staker_rewards"), 0)],
     ["validator_incentive pot", tok(accrued("validator_incentive"), 0)],
-    ["DAP buffer and staging change", tok(is.thisEra.reserveDelta, 0)],
+    ["DAP buffer inflow (buffer + staging)", tok(is.thisEra.reserveDelta, 0)],
   ]);
   const config = dl([
     ["Dap.LastIssuanceTimestamp", `${time(is.lastDrip)} <small>${ago(is.lastDrip)}</small>`],

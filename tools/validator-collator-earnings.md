@@ -25,10 +25,10 @@ The defaults are read from Polkadot with the `dot` CLI on 2026-11-26.
 |---|---|
 | Budget shares | Asset Hub `Dap.BudgetAllocation` |
 | Issuance per era | The two pots of era 2365 (`Staking.ErasValidatorReward` and `ErasValidatorIncentiveBudget`) divided by their shares |
-| Relay points per era | Asset Hub `Staking.ErasRewardPoints` total, mean of eras 2360 to 2364 |
-| Validators scored | Number of entries in `ErasRewardPoints`, about 400 in those eras |
+| Relay points per era | Asset Hub `Staking.ErasRewardPoints` total, era 2366, the first with 320 validators |
+| Validators scored | Number of entries in `ErasRewardPoints`, 320 in era 2366 |
 | Active validators | Asset Hub `Staking.ValidatorCount`, 320 |
-| Self-stake share | Median of own / total in `Staking.ErasStakersOverview`, era 2364 |
+| Self-stake share | Median of own / total in `Staking.ErasStakersOverview`, era 2366 |
 | Block times | Configured values: Asset Hub 2 s, People 2 s, Bulletin 6 s. Measured averages are within 1% of these |
 | Invulnerables and candidates | `CollatorSelection.Invulnerables` and `CandidateList` on each chain |
 
@@ -47,7 +47,7 @@ recipients with `Dap.BudgetAllocation`. The shares must add up to 100%. On 2026-
 
 At the end of each era the two pots collected during that era are moved into era pots. So the staker
 pot is the issuance per era times the `staker_rewards` share, and the incentive budget is the
-issuance per era times the `validator_incentive` share. Era 2365 gives about 153,132 DOT per era for
+issuance per era times the `validator_incentive` share. Era 2366 gives about 153,174 DOT per era for
 both pots.
 
 The `validator_incentive` share was lowered in steps by governance. It was 22.6% up to era 2348,
@@ -128,8 +128,8 @@ number of active validators. If nominators move to dotUSD or Valar stability poo
 lower `staker_rewards`. The freed share goes to the buffer and extends the runway.
 
 The buffer balance is the free balance of the DAP buffer account on Asset Hub,
-`13UVJyLkAxdQn6zM3GrLGvrFgN9jWneRX2NGvf3u92iunZq1` (`modl` + `dap/buff`). It held about 7.99M DOT on
-2026-11-26.
+`13UVJyLkAxdQn6zM3GrLGvrFgN9jWneRX2NGvf3u92iunZq1` (`modl` + `dap/buff`). It held about 8.04M DOT on
+2026-11-27.
 
 With the doc's inputs (55.93M DOT issuance per year, shares 45.2% / 5.1% / 49.7%, 320 validators at
 2,000 USD per month, DOT at $1.00, buffer balance 4.96M DOT) the tool gives 15.36M DOT locked per
@@ -258,7 +258,7 @@ s = (M·P / (E·(R + S)) − pot·own − ops) / (w·I)
 If the current earnings already cover `M`, the tool says so. That includes the case where
 operational costs alone cover it, so `s` would be below 0. If `s` is more than what
 `staker_rewards` leaves (100% minus that share), the share alone can't cover the cost. At the
-defaults `s` is about 20.2%, against 12.1% today.
+defaults `s` is about 20.3%, against 12.1% today.
 
 ### Why points per block don't help in the plain draw
 
